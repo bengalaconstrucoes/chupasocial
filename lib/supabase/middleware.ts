@@ -43,7 +43,22 @@ export async function updateSession(request: NextRequest) {
   // Renova o token e identifica a sessão atual.
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+
+  // Sessão de uma conta que não existe mais (excluída) ou revogada: limpa os
+  // cookies para não repetir chamadas 401/403 à API de auth a cada navegação.
+  if (userError) {
+    const status = (userError as { status?: number }).status;
+    if (status === 400 || status === 401 || status === 403) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      response.cookies.getAll().forEach(({ name }) => {
+        if (name.startsWith("sb-") && name.includes("auth-token")) {
+          response.cookies.delete(name);
+        }
+      });
+    }
+  }
 
   const { pathname } = request.nextUrl;
 

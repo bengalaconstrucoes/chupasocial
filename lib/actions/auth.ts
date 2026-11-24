@@ -23,6 +23,12 @@ function translateAuthError(message: string) {
     return "Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada e o spam.";
   if (value.includes("user already registered") || value.includes("already been registered"))
     return "Este e-mail já está cadastrado. Tente entrar ou recuperar a senha.";
+  if (
+    value.includes("email rate limit") ||
+    value.includes("over_email_send_rate_limit") ||
+    value.includes("email_send_rate_limit")
+  )
+    return "Estamos no limite de envio de e-mails agora (o provedor libera poucos por hora). Tente de novo em alguns minutos — se a conta já foi criada, use “Reenviar confirmação” na tela de login.";
   if (value.includes("rate limit") || value.includes("too many"))
     return "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
   if (value.includes("password") && value.includes("at least"))
