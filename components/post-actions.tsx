@@ -127,9 +127,12 @@ export function PostActions({
 
   function focusComment() {
     const element = document.getElementById(`comments-${postId}`);
-    element?.scrollIntoView({ behavior: "smooth", block: "center" });
-    const input = element?.querySelector<HTMLTextAreaElement>("textarea");
-    input?.focus();
+    if (!element) {
+      router.push(`/post/${postId}`);
+      return;
+    }
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   }
 
   function saveEdit() {
