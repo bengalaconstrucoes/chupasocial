@@ -27,10 +27,16 @@ function CommentNode({
       <Avatar profile={comment.author} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
-          <Link href={`/u/${comment.author.username}`} className="font-semibold hover:underline">
-            {comment.author.display_name}
-          </Link>
-          <span className="text-xs text-muted">@{comment.author.username}</span>
+          {comment.author ? (
+            <Link href={`/u/${comment.author.username}`} className="font-semibold hover:underline">
+              {comment.author.display_name}
+            </Link>
+          ) : (
+            <span className="font-semibold">Alguém</span>
+          )}
+          {comment.author && (
+            <span className="text-xs text-muted">@{comment.author.username}</span>
+          )}
           <span className="text-xs text-muted">· {timeAgo(comment.created_at)}</span>
         </div>
         <p className="prose-chupa mt-0.5 text-sm leading-relaxed">{comment.content}</p>
@@ -42,7 +48,7 @@ function CommentNode({
           >
             <CornerDownRight size={12} /> Responder
           </button>
-          {comment.author.id === viewerId && (
+          {comment.author?.id === viewerId && (
             <button
               type="button"
               disabled={busy}
@@ -132,7 +138,7 @@ export function Comments({
       >
         {replyTo && (
           <div className="mb-1.5 flex items-center justify-between rounded-md bg-surface-2 px-2 py-1 text-xs text-muted">
-            <span>Respondendo @{replyTo.author.username}</span>
+            <span>Respondendo @{replyTo.author?.username ?? "alguém"}</span>
             <button
               type="button"
               onClick={() => setReplyTo(null)}

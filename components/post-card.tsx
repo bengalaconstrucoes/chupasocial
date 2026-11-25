@@ -18,21 +18,25 @@ function PostBody({
 }) {
   const isOwner = post.author_id === viewerId;
   const canEdit = false;
+  const author = post.author;
+
+  // Linha sem autor visível (perfil removido/invisível por RLS): não derruba a página.
+  if (!author) return null;
 
   return (
     <article className={cn("px-4 py-3.5 sm:px-5", embedded && "rounded-xl border border-line bg-bg px-3.5 py-3")}>
       <header className="flex items-start gap-3">
-        <Avatar profile={post.author} size={embedded ? 32 : 40} />
+        <Avatar profile={author} size={embedded ? 32 : 40} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
             <Link
-              href={`/u/${post.author.username}`}
+              href={`/u/${author.username}`}
               className="truncate font-semibold hover:underline"
             >
-              {post.author.display_name}
+              {author.display_name}
             </Link>
-            {post.author.is_private && <Lock size={12} className="text-muted" aria-label="Perfil privado" />}
-            <span className="truncate text-muted">@{post.author.username}</span>
+            {author.is_private && <Lock size={12} className="text-muted" aria-label="Perfil privado" />}
+            <span className="truncate text-muted">@{author.username}</span>
             <span className="text-muted" aria-hidden>
               ·
             </span>
@@ -86,7 +90,7 @@ function PostBody({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={media.public_url}
-                alt={`Imagem ${index + 1} da publicação de ${post.author.display_name}`}
+                alt={`Imagem ${index + 1} da publicação de ${author.display_name}`}
                 loading="lazy"
                 className={cn(
                   "w-full object-cover",
@@ -131,7 +135,7 @@ export function PostCard({
   viewerId: string;
   detail?: boolean;
 }) {
-  const isRepost = Boolean(post.repost_of && post.reposted_post);
+  const isRepost = Boolean(post.repost_of);
   const inner = post.reposted_post;
 
   return (
@@ -151,7 +155,11 @@ export function PostCard({
         </div>
       )}
 
-      {isRepost && inner ? (
+      {isRepost && !inner ? (
+        <p className="px-4 py-4 text-sm text-muted sm:px-5">
+          A publicação original foi removida ou não está disponível.
+        </p>
+      ) : isRepost && inner ? (
         <div className="px-3 pb-3 pt-2 sm:px-4">
           <PostBody post={inner} viewerId={viewerId} detail={false} embedded />
           <div className="mt-2 px-1">

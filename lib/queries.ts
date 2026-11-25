@@ -15,16 +15,7 @@ export const POST_SELECT = `
   likes(count),
   comments(count),
   reposts:posts!repost_of(count),
-  community:communities(id, slug, name),
-  reposted_post:posts!repost_of(
-    id, author_id, community_id, repost_of, content, created_at, edited_at,
-    author:profiles!posts_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, is_private, deactivated_at, created_at, updated_at),
-    media:post_media(id, storage_path, public_url, position),
-    likes(count),
-    comments(count),
-    reposts:posts!repost_of(count),
-    community:communities(id, slug, name)
-  )
+  community:communities(id, slug, name)
 `;
 
 type RawPost = Record<string, any>;
@@ -57,11 +48,33 @@ export function normalizePost(
     community: raw.community ?? null,
   };
 
-  if (raw.reposted_post) {
-    base.reposted_post = normalizePost(raw.reposted_post, likedIds, repostedIds);
-  }
-
   return base;
+}
+
+/**
+ * O embed aninhado do post repostado (`posts!repost_of`) volta com `author` nulo
+ * em algumas combinações de RLS/PostgREST, o que quebrava o feed inteiro.
+ * Buscamos os posts originais numa segunda consulta e ligamos manualmente.
+ */
+async function attachRepostedPosts(
+  rows: RawPost[],
+  liked: Set<string>,
+  reposted: Set<string>,
+): Promise<FeedPost[]> {
+  const posts = rows.map((row) => normalizePost(row, liked, reposted));
+  const repostIds = [...new Set(rows.map((row) => row.repost_of).filter(Boolean))] as string[];
+  if (repostIds.length === 0) return posts;
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("posts").select(POST_SELECT).in("id", repostIds);
+  const originals = new Map<string, FeedPost>(
+    ((data ?? []) as RawPost[]).map((row) => [row.id, normalizePost(row, liked, reposted)]),
+  );
+
+  return posts.map((post) => {
+    if (!post.repost_of) return post;
+    return { ...post, reposted_post: originals.get(post.repost_of) ?? null };
+  });
 }
 
 export async function getMyLikes(postIds: string[]) {
@@ -123,19 +136,22 @@ export async function fetchFeed(options: {
   const { data, error } = await query;
   if (error || !data) return [];
 
-  const ids = data.flatMap((row: any) => [row.id, row.reposted_post?.id].filter(Boolean));
+  const rows = data as unknown as RawPost[];
+  const ids = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
   const { liked, reposted } = await getMyLikes(ids);
 
-  return data.map((row) => normalizePost(row, liked, reposted));
+  return attachRepostedPosts(rows, liked, reposted);
 }
 
 export async function fetchPostById(postId: string): Promise<FeedPost | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("posts").select(POST_SELECT).eq("id", postId).maybeSingle();
   if (error || !data) return null;
-  const ids = [data.id, (data as any).reposted_post?.id].filter(Boolean);
+  const row = data as unknown as RawPost;
+  const ids = [row.id, row.repost_of].filter(Boolean);
   const { liked, reposted } = await getMyLikes(ids);
-  return normalizePost(data, liked, reposted);
+  const [post] = await attachRepostedPosts([row], liked, reposted);
+  return post ?? null;
 }
 
 export async function fetchComments(postId: string): Promise<CommentItem[]> {
