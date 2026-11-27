@@ -20,6 +20,8 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
     try {
       localStorage.setItem("chupa-theme", next);
     } catch {}
+    // Cookie mantém o tema também no HTML do servidor: sem piscar no F5.
+    document.cookie = `chupa-theme=${next}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
   }
 
   return (

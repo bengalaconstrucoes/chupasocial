@@ -1,8 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { Avatar } from "@/components/avatar";
 import { MessageThread } from "@/components/message-thread";
 import { createClient } from "@/lib/supabase/server";
 import type { Message, Profile } from "@/lib/types";
@@ -24,47 +21,46 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
 
   if (!membership) notFound();
 
-  const [{ data: otherRows }, { data: messages }] = await Promise.all([
-    supabase
-      .from("conversation_members")
-      .select("user:profiles!conversation_members_user_id_fkey(*)")
-      .eq("conversation_id", id)
-      .neq("user_id", user.id)
-      .limit(1),
-    supabase
-      .from("messages")
-      .select("*")
-      .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
-      .limit(200),
-  ]);
+  const [{ data: conversation }, { data: memberRows }, { data: messages }, { data: viewerRow }] =
+    await Promise.all([
+      supabase.from("conversations").select("id, title, created_by").eq("id", id).maybeSingle(),
+      supabase
+        .from("conversation_members")
+        .select("user:profiles!conversation_members_user_id_fkey(*)")
+        .eq("conversation_id", id),
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", id)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order("created_at", { ascending: true })
+        .limit(200),
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    ]);
 
-  const other = ((otherRows?.[0] as any)?.user ?? null) as Profile | null;
+  const members = ((memberRows ?? [])
+    .map((row: any) => row.user as Profile | null)
+    .filter(Boolean) as Profile[]).sort((a, b) => {
+    if (a.id === user.id) return -1;
+    if (b.id === user.id) return 1;
+    return a.display_name.localeCompare(b.display_name, "pt-BR");
+  });
+
+  const viewer = viewerRow as Profile | null;
+  if (!viewer) redirect("/login?erro=sessao");
+
+  const title = (conversation?.title as string | null) ?? null;
 
   return (
     <AppShell>
-      <div className="flex items-center gap-3 border-b border-line bg-bg/90 px-4 py-2.5 backdrop-blur sm:px-5">
-        <Link
-          href="/messages"
-          className="rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
-          aria-label="Voltar para mensagens"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <Avatar profile={other} size={34} />
-        <div className="min-w-0">
-          <Link href={other ? `/u/${other.username}` : "#"} className="block truncate text-sm font-semibold hover:underline">
-            {other?.display_name ?? "Conversa"}
-          </Link>
-          {other && <p className="truncate text-xs text-muted">@{other.username}</p>}
-        </div>
-      </div>
-
       <MessageThread
         conversationId={id}
-        viewerId={user.id}
+        title={title}
+        createdBy={(conversation?.created_by as string | null) ?? null}
+        isGroup={Boolean(title) || members.length > 2}
+        viewer={viewer}
+        members={members}
         initialMessages={(messages ?? []) as Message[]}
-        other={other}
       />
     </AppShell>
   );

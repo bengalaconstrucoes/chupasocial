@@ -1,17 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useActionState, useRef, useState } from "react";
+import { Eye, EyeOff, Loader2, ShieldAlert } from "lucide-react";
 import {
-  requestPasswordResetAction,
-  resendConfirmationAction,
+  recoverPasswordAction,
   signInAction,
   signUpAction,
-  updatePasswordAction,
   type AuthState,
 } from "@/lib/actions/auth";
-import { usernameFromEmail } from "@/lib/utils";
 
 const initial: AuthState = {};
 
@@ -39,7 +36,15 @@ function Alert({ state }: { state: AuthState }) {
   return null;
 }
 
-function PasswordField({ name = "password", label = "Senha" }) {
+function PasswordField({
+  name = "password",
+  label = "Senha",
+  autoComplete = "current-password",
+}: {
+  name?: string;
+  label?: string;
+  autoComplete?: string;
+}) {
   const [visible, setVisible] = useState(false);
   return (
     <div>
@@ -53,7 +58,7 @@ function PasswordField({ name = "password", label = "Senha" }) {
           type={visible ? "text" : "password"}
           required
           minLength={8}
-          autoComplete={name === "confirm" ? "new-password" : "current-password"}
+          autoComplete={autoComplete}
           className="field pr-11"
           placeholder="••••••••"
         />
@@ -82,11 +87,11 @@ function Submit({ label, pending }: { label: string; pending: boolean }) {
 export function LoginForm({
   next = "/",
   notice,
-  initialEmail = "",
+  initialIdentifier = "",
 }: {
   next?: string;
   notice?: string;
-  initialEmail?: string;
+  initialIdentifier?: string;
 }) {
   const [state, action, pending] = useActionState(signInAction, initial);
 
@@ -100,19 +105,24 @@ export function LoginForm({
       )}
       <Alert state={state} />
       <div>
-        <label className="field-label" htmlFor="email">
-          E-mail
+        <label className="field-label" htmlFor="identifier">
+          Usuário ou e-mail
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="identifier"
+          name="identifier"
+          type="text"
           required
-          autoComplete="email"
-          defaultValue={initialEmail}
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          defaultValue={initialIdentifier}
           className="field"
-          placeholder="voce@exemplo.com"
+          placeholder="seu_arroba"
         />
+        <p className="mt-1 text-xs text-muted">
+          Contas criadas antes da mudança entram com o e-mail.
+        </p>
       </div>
       <PasswordField />
       <div className="flex justify-end">
@@ -121,58 +131,43 @@ export function LoginForm({
         </Link>
       </div>
       <Submit label="Entrar" pending={pending} />
-      <ResendConfirmation />
     </form>
   );
 }
 
-function ResendConfirmation() {
-  const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(resendConfirmationAction, initial);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full text-center text-xs text-muted hover:text-ink"
-      >
-        Não recebeu o e-mail de confirmação? Reenviar
-      </button>
-    );
-  }
-
-  return (
-    <form action={action} className="space-y-2 rounded-lg border border-line p-3">
-      <Alert state={state} />
-      <input
-        name="email"
-        type="email"
-        required
-        placeholder="E-mail da conta"
-        className="field text-sm"
-      />
-      <button className="btn btn-ghost w-full" disabled={pending}>
-        {pending ? "Reenviando…" : "Reenviar confirmação"}
-      </button>
-    </form>
-  );
-}
-
-export function SignupForm() {
+export function SignupForm({
+  captcha,
+}: {
+  captcha: { question: string; nonce: string; token: string };
+}) {
   const [state, action, pending] = useActionState(signUpAction, initial);
-  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
-  const [touchedUsername, setTouchedUsername] = useState(false);
-
-  function suggest(handle: string) {
-    if (touchedUsername) return;
-    setUsername(usernameFromEmail(handle).slice(0, 20));
-  }
+  const startedAt = useRef(Date.now());
+  const elapsedRef = useRef<HTMLInputElement>(null);
 
   return (
-    <form action={action} className="space-y-4">
+    <form
+      action={action}
+      className="space-y-4"
+      onSubmit={() => {
+        if (elapsedRef.current) {
+          elapsedRef.current.value = String(Date.now() - startedAt.current);
+        }
+      }}
+    >
       <Alert state={state} />
+
+      <div className="flex gap-2.5 rounded-lg border border-line bg-surface-2 px-3 py-2.5">
+        <ShieldAlert size={16} className="mt-0.5 shrink-0 text-muted" />
+        <p className="text-xs leading-relaxed text-muted">
+          <span className="font-medium text-ink">Opa, chupas: login por e-mail desativado.</span>{" "}
+          Enviar e-mail custa dinheiro e ainda não temos verba pro serviço, então o cadastro é só
+          com nome de usuário e senha. No fim você recebe um{" "}
+          <span className="font-medium text-ink">código secreto</span> — guarde ele, é com ele que
+          você troca a senha se esquecer.
+        </p>
+      </div>
+
       <div>
         <label className="field-label" htmlFor="display_name">
           Nome
@@ -203,36 +198,52 @@ export function SignupForm() {
             maxLength={20}
             pattern="[a-zA-Z0-9_]{3,20}"
             value={username}
-            onChange={(event) => {
-              setTouchedUsername(true);
-              setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""));
-            }}
+            onChange={(event) =>
+              setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))
+            }
             className="field pl-8"
             placeholder="seu_arroba"
           />
         </div>
         <p className="mt-1 text-xs text-muted">Letras, números e _ (3 a 20 caracteres).</p>
       </div>
-      <div>
-        <label className="field-label" htmlFor="email">
-          E-mail
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            suggest(event.target.value);
-          }}
-          className="field"
-          placeholder="voce@exemplo.com"
-        />
+      <PasswordField autoComplete="new-password" />
+
+      {/* Honeypot: humano não vê nem preenche. */}
+      <div className="absolute -left-[9999px] top-0 h-0 w-0 overflow-hidden" aria-hidden>
+        <label htmlFor="company">Empresa</label>
+        <input id="company" name="company" type="text" tabIndex={-1} autoComplete="off" />
       </div>
-      <PasswordField />
+      <input ref={elapsedRef} type="hidden" name="elapsed_ms" defaultValue="0" />
+      <input type="hidden" name="captcha_nonce" value={captcha.nonce} />
+      <input type="hidden" name="captcha_token" value={captcha.token} />
+
+      <div className="rounded-lg border border-line bg-surface-2 p-3">
+        <label className="field-label" htmlFor="captcha_answer">
+          Verificação anti-bot
+        </label>
+        <div className="flex items-center gap-2">
+          <span className="chip shrink-0 !py-1.5 font-mono text-sm text-ink">
+            {captcha.question}
+          </span>
+          <input
+            id="captcha_answer"
+            name="captcha_answer"
+            type="text"
+            inputMode="numeric"
+            required
+            autoComplete="off"
+            maxLength={2}
+            className="field max-w-[5.5rem] text-center"
+            placeholder="?"
+            aria-describedby="captcha-hint"
+          />
+          <p id="captcha-hint" className="text-[0.68rem] leading-snug text-muted">
+            Resolva a conta para confirmar que você é gente.
+          </p>
+        </div>
+      </div>
+
       <Submit label="Criar conta" pending={pending} />
       <p className="text-center text-xs text-muted">
         Ao criar a conta você concorda em manter o respeito nas conversas. Sem spam, sem
@@ -242,41 +253,45 @@ export function SignupForm() {
   );
 }
 
-export function ForgotForm() {
-  const [state, action, pending] = useActionState(requestPasswordResetAction, initial);
+export function RecoveryForm() {
+  const [state, action, pending] = useActionState(recoverPasswordAction, initial);
+
   return (
     <form action={action} className="space-y-4">
       <Alert state={state} />
       <div>
-        <label className="field-label" htmlFor="email">
-          E-mail da conta
+        <label className="field-label" htmlFor="username">
+          Nome de usuário
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="username"
+          name="username"
           required
-          autoComplete="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           className="field"
-          placeholder="voce@exemplo.com"
+          placeholder="seu_arroba"
         />
       </div>
-      <Submit label="Enviar link de recuperação" pending={pending} />
-      <p className="text-center text-sm text-muted">
-        <Link href="/login" className="text-accent hover:underline">
-          Voltar para o login
-        </Link>
-      </p>
-    </form>
-  );
-}
-
-export function ResetForm() {
-  const [state, action, pending] = useActionState(updatePasswordAction, initial);
-  return (
-    <form action={action} className="space-y-4">
-      <Alert state={state} />
-      <PasswordField />
+      <div>
+        <label className="field-label" htmlFor="code">
+          Código de recuperação
+        </label>
+        <input
+          id="code"
+          name="code"
+          required
+          autoComplete="off"
+          spellCheck={false}
+          className="field font-mono tracking-wider"
+          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+        />
+        <p className="mt-1 text-xs text-muted">
+          O código que aparece uma única vez (no cadastro ou em Configurações → Conta).
+        </p>
+      </div>
+      <PasswordField label="Nova senha" autoComplete="new-password" />
       <div>
         <label className="field-label" htmlFor="confirm">
           Confirmar nova senha
@@ -292,7 +307,12 @@ export function ResetForm() {
           placeholder="••••••••"
         />
       </div>
-      <Submit label="Salvar nova senha" pending={pending} />
+      <Submit label="Trocar senha" pending={pending} />
+      <p className="text-center text-sm text-muted">
+        <Link href="/login" className="text-accent hover:underline">
+          Voltar para o login
+        </Link>
+      </p>
     </form>
   );
 }

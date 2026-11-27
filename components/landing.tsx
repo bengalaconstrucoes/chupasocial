@@ -69,7 +69,7 @@ export function Landing() {
               </Link>
             </div>
             <p className="mt-4 text-xs text-muted">
-              Cadastro por e-mail · perfil privado opcional · sem anúncios
+              Cadastro com usuário e senha · perfil privado opcional · sem anúncios
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export function Landing() {
             <div>
               <h2 className="text-2xl font-semibold">Comece pelo seu arroba.</h2>
               <p className="mt-1.5 max-w-md text-sm text-muted">
-                Crie a conta, escolha o nome de usuário, confirme o e-mail e publique. Leva menos de
+                Crie a conta, escolha o nome de usuário e publique. Leva menos de
                 um minuto.
               </p>
             </div>

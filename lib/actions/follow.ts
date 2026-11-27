@@ -20,6 +20,11 @@ export async function toggleFollowAction(targetId: string): Promise<ActionResult
 
   if (!target) return { ok: false, error: "Perfil não encontrado." };
 
+  const { data: blockState } = await supabase.rpc("block_state", { p_user: targetId });
+  if (blockState && blockState !== "none") {
+    return { ok: false, error: "Você não pode seguir este perfil." };
+  }
+
   const { data: existing } = await supabase
     .from("follows")
     .select("follower_id")
@@ -84,6 +89,33 @@ export async function toggleFollowAction(targetId: string): Promise<ActionResult
   revalidatePath(`/u/${target.username}`);
   revalidatePath("/");
   return { ok: true, message: "Seguindo!" };
+}
+
+export async function removeFollowerAction(followerId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sua sessão expirou." };
+  if (user.id === followerId) return { ok: false, error: "Ação inválida." };
+
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("username")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const { error } = await supabase.rpc("remove_follower", { p_follower: followerId });
+  if (error) {
+    if (/not_following/i.test(error.message)) {
+      return { ok: false, error: "Essa pessoa já não te segue." };
+    }
+    return { ok: false, error: "Não foi possível remover o seguidor." };
+  }
+
+  if (me?.username) revalidatePath(`/u/${me.username}/followers`);
+  revalidatePath("/settings");
+  return { ok: true, message: "Seguidor removido." };
 }
 
 export async function respondFollowRequestAction(

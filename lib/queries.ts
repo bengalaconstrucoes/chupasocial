@@ -9,13 +9,15 @@ import type {
 } from "@/lib/types";
 
 export const POST_SELECT = `
-  id, author_id, community_id, repost_of, content, created_at, edited_at,
-  author:profiles!posts_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, is_private, deactivated_at, created_at, updated_at),
-  media:post_media(id, storage_path, public_url, position),
+  id, author_id, community_id, repost_of, root_post_id, parent_post_id, content, created_at, edited_at,
+  author:profiles!posts_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, location, accent_color, name_font, is_verified, flag, status_text, status_emoji, favorite_song, favorite_song_artist, pinned_post_id, show_stats, show_visits, profile_style, last_seen_at, is_private, deactivated_at, created_at, updated_at),
+  media:post_media(id, storage_path, public_url, position, media_type),
   likes(count),
-  comments(count),
+  replies:posts!root_post_id(count),
   reposts:posts!repost_of(count),
-  community:communities(id, slug, name)
+  community:communities(id, slug, name),
+  collaborators:post_collaborators(user:profiles!post_collaborators_user_id_fkey(id, username, display_name, avatar_url, is_verified)),
+  poll:polls(post_id, options:poll_options(id, label, position))
 `;
 
 type RawPost = Record<string, any>;
@@ -24,28 +26,50 @@ export function normalizePost(
   raw: RawPost,
   likedIds: Set<string>,
   repostedIds: Set<string>,
+  savedIds: Set<string> = new Set(),
+  viewerId?: string | null,
 ): FeedPost {
   const count = (value: unknown) => {
     if (Array.isArray(value)) return Number(value[0]?.count ?? 0);
     return Number(value ?? 0);
   };
 
+  const rawPoll = Array.isArray(raw.poll) ? raw.poll[0] : raw.poll;
+  let poll: FeedPost["poll"] = null;
+  if (rawPoll) {
+    const options = [...((rawPoll.options ?? []) as any[])]
+      .sort((a, b) => Number(a.position) - Number(b.position))
+      .map((option) => ({
+        id: option.id as string,
+        label: option.label as string,
+        count: 0,
+      }));
+    poll = { options, my_vote: null, total: 0 };
+  }
+
   const base: FeedPost = {
     id: raw.id,
     author_id: raw.author_id,
     community_id: raw.community_id ?? null,
     repost_of: raw.repost_of ?? null,
+    root_post_id: raw.root_post_id ?? null,
+    parent_post_id: raw.parent_post_id ?? null,
     content: raw.content ?? "",
     created_at: raw.created_at,
     edited_at: raw.edited_at ?? null,
     author: raw.author as Profile,
     media: [...((raw.media ?? []) as any[])].sort((a, b) => a.position - b.position),
     like_count: count(raw.likes),
-    comment_count: count(raw.comments),
+    comment_count: count(raw.replies ?? raw.comments),
     repost_count: count(raw.reposts),
     liked_by_me: likedIds.has(raw.id),
     reposted_by_me: repostedIds.has(raw.id),
+    saved_by_me: savedIds.has(raw.id),
     community: raw.community ?? null,
+    collaborators: ((raw.collaborators ?? []) as any[])
+      .map((row) => row.user)
+      .filter(Boolean),
+    poll,
   };
 
   return base;
@@ -60,15 +84,20 @@ async function attachRepostedPosts(
   rows: RawPost[],
   liked: Set<string>,
   reposted: Set<string>,
+  saved: Set<string> = new Set(),
+  viewerId?: string | null,
 ): Promise<FeedPost[]> {
-  const posts = rows.map((row) => normalizePost(row, liked, reposted));
+  const posts = rows.map((row) => normalizePost(row, liked, reposted, saved, viewerId));
   const repostIds = [...new Set(rows.map((row) => row.repost_of).filter(Boolean))] as string[];
   if (repostIds.length === 0) return posts;
 
   const supabase = await createClient();
   const { data } = await supabase.from("posts").select(POST_SELECT).in("id", repostIds);
   const originals = new Map<string, FeedPost>(
-    ((data ?? []) as RawPost[]).map((row) => [row.id, normalizePost(row, liked, reposted)]),
+    ((data ?? []) as RawPost[]).map((row) => [
+      row.id,
+      normalizePost(row, liked, reposted, saved, viewerId),
+    ]),
   );
 
   return posts.map((post) => {
@@ -78,34 +107,54 @@ async function attachRepostedPosts(
 }
 
 export async function getMyLikes(postIds: string[]) {
-  if (postIds.length === 0) return { liked: new Set<string>(), reposted: new Set<string>() };
+  const empty = {
+    liked: new Set<string>(),
+    reposted: new Set<string>(),
+    saved: new Set<string>(),
+    userId: null as string | null,
+  };
+  if (postIds.length === 0) return empty;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { liked: new Set<string>(), reposted: new Set<string>() };
+  if (!user) return empty;
 
-  const [{ data: likes }, { data: reposts }] = await Promise.all([
+  const [{ data: likes }, { data: reposts }, { data: saved }] = await Promise.all([
     supabase.from("likes").select("post_id").eq("user_id", user.id).in("post_id", postIds),
     supabase.from("posts").select("repost_of").eq("author_id", user.id).in("repost_of", postIds),
+    supabase.from("saved_posts").select("post_id").eq("user_id", user.id).in("post_id", postIds),
   ]);
 
   return {
     liked: new Set((likes ?? []).map((row: any) => row.post_id as string)),
     reposted: new Set((reposts ?? []).map((row: any) => row.repost_of as string)),
+    saved: new Set((saved ?? []).map((row: any) => row.post_id as string)),
+    userId: user.id,
   };
 }
 
+export async function fetchBlockedIds(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("blocked_user_ids");
+  if (!data) return [];
+  return Array.isArray(data) ? (data as string[]) : [];
+}
+
 export async function fetchFeed(options: {
-  mode: "all" | "following" | "profile" | "community";
+  mode: "all" | "following" | "profile" | "community" | "hashtag";
   profileId?: string;
   communityId?: string;
+  tag?: string;
   viewerId?: string;
   limit?: number;
   before?: string;
+  personalize?: boolean;
 }): Promise<FeedPost[]> {
   const supabase = await createClient();
   const limit = options.limit ?? 12;
+  const fetchLimit = options.personalize && options.viewerId ? Math.min(60, limit * 4) : limit;
+  const blocked = await fetchBlockedIds();
 
   let authorIds: string[] | null = null;
   if (options.mode === "following" && options.viewerId) {
@@ -120,9 +169,11 @@ export async function fetchFeed(options: {
   let query = supabase
     .from("posts")
     .select(POST_SELECT)
+    .is("root_post_id", null)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(fetchLimit);
 
+  if (blocked.length > 0) query = query.not("author_id", "in", `(${blocked.join(",")})`);
   if (options.mode === "profile" && options.profileId) query = query.eq("author_id", options.profileId);
   if (options.mode === "following" && authorIds) {
     if (authorIds.length === 0) return [];
@@ -131,6 +182,9 @@ export async function fetchFeed(options: {
   if (options.mode === "community" && options.communityId) {
     query = query.eq("community_id", options.communityId);
   }
+  if (options.mode === "hashtag" && options.tag) {
+    query = query.ilike("content", `%#${options.tag}%`);
+  }
   if (options.before) query = query.lt("created_at", options.before);
 
   const { data, error } = await query;
@@ -138,9 +192,47 @@ export async function fetchFeed(options: {
 
   const rows = data as unknown as RawPost[];
   const ids = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
-  const { liked, reposted } = await getMyLikes(ids);
+  const { liked, reposted, saved, userId } = await getMyLikes(ids);
 
-  return attachRepostedPosts(rows, liked, reposted);
+  const normalized = await attachPollVotes(
+    await attachRepostedPosts(rows, liked, reposted, saved, userId),
+    userId,
+  );
+
+  if (!options.personalize || !options.viewerId) return normalized;
+  return personalizePosts(normalized, options.viewerId, limit);
+}
+
+/**
+ * Ordena o feed "Para você" por engajamento, proximidade e recência.
+ * O conteúdo continua sendo cronológico na origem; só a ordem muda.
+ */
+async function personalizePosts(
+  posts: FeedPost[],
+  viewerId: string,
+  limit: number,
+): Promise<FeedPost[]> {
+  if (posts.length <= 1) return posts;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", viewerId);
+
+  const close = new Set([viewerId, ...(data ?? []).map((row: any) => row.following_id as string)]);
+  const now = Date.now();
+
+  const scored = posts.map((post) => {
+    const hours = (now - new Date(post.created_at).getTime()) / 3_600_000;
+    const engagement = post.like_count * 2 + post.comment_count * 3 + post.repost_count * 4;
+    const bonus = close.has(post.author_id) ? 40 : 0;
+    const recency = Math.max(0, 72 - hours);
+    return { post, score: engagement + bonus + recency };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((entry) => entry.post);
 }
 
 export async function fetchPostById(postId: string): Promise<FeedPost | null> {
@@ -149,40 +241,193 @@ export async function fetchPostById(postId: string): Promise<FeedPost | null> {
   if (error || !data) return null;
   const row = data as unknown as RawPost;
   const ids = [row.id, row.repost_of].filter(Boolean);
-  const { liked, reposted } = await getMyLikes(ids);
-  const [post] = await attachRepostedPosts([row], liked, reposted);
+  const { liked, reposted, saved, userId } = await getMyLikes(ids);
+  const [post] = await attachPollVotes(
+    await attachRepostedPosts([row], liked, reposted, saved, userId),
+    userId,
+  );
   return post ?? null;
 }
 
 export async function fetchComments(postId: string): Promise<CommentItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("comments")
-    .select(
-      `id, post_id, parent_id, content, created_at,
-       author:profiles!comments_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, is_private, deactivated_at, created_at, updated_at)`,
-    )
-    .eq("post_id", postId)
-    .order("created_at", { ascending: true });
+    .from("posts")
+    .select(POST_SELECT)
+    .eq("root_post_id", postId)
+    .order("created_at", { ascending: true })
+    .limit(200);
 
   if (error || !data) return [];
 
-  const items = data as unknown as CommentItem[];
-  const roots: CommentItem[] = [];
-  const index = new Map<string, CommentItem>();
+  const rows = data as unknown as RawPost[];
+  const { liked, reposted, saved, userId } = await getMyLikes(
+    rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean)),
+  );
+  const posts = await attachRepostedPosts(rows, liked, reposted, saved, userId);
 
-  for (const item of items) {
-    index.set(item.id, { ...item, replies: [] });
+  const index = new Map<string, CommentItem>();
+  const roots: CommentItem[] = [];
+  for (const post of posts) index.set(post.id, { ...post, replies: [] });
+  for (const post of posts) {
+    const node = index.get(post.id)!;
+    const parent = post.parent_post_id ? index.get(post.parent_post_id) : null;
+    if (parent) parent.replies.push(node);
+    else roots.push(node);
   }
-  for (const item of items) {
-    const node = index.get(item.id)!;
-    if (item.parent_id && index.has(item.parent_id)) {
-      index.get(item.parent_id)!.replies!.push(node);
-    } else {
-      roots.push(node);
-    }
+  const withPolls = await attachPollVotes(roots.flatMap((root) => [root, ...root.replies]), userId);
+  const byId = new Map(withPolls.map((post) => [post.id, post]));
+  return roots.map((root) => {
+    const updated = byId.get(root.id) ?? root;
+    return {
+      ...updated,
+      replies: (updated.replies ?? root.replies).map((reply) => byId.get(reply.id) ?? reply),
+    };
+  });
+}
+
+/**
+ * Contagem de votos das enquetes vem numa consulta separada: assim um embed
+ * aninhado mais exótico nunca derruba o feed inteiro.
+ */
+export async function attachPollVotes<T extends FeedPost>(
+  posts: T[],
+  viewerId?: string | null,
+): Promise<T[]> {
+  const withPoll = posts.filter((post) => post.poll);
+  if (withPoll.length === 0) return posts;
+
+  const supabase = await createClient();
+  const ids = withPoll.map((post) => post.id);
+  const { data: votes } = await supabase
+    .from("poll_votes")
+    .select("post_id, option_id, user_id")
+    .in("post_id", ids);
+
+  const grouped = new Map<string, Array<{ optionId: string; userId: string }>>();
+  for (const vote of votes ?? []) {
+    const list = grouped.get(vote.post_id) ?? [];
+    list.push({ optionId: vote.option_id, userId: vote.user_id });
+    grouped.set(vote.post_id, list);
   }
-  return roots;
+
+  return posts.map((post) => {
+    if (!post.poll) return post;
+    const list = grouped.get(post.id) ?? [];
+    const options = post.poll.options.map((option) => ({
+      ...option,
+      count: list.filter((vote) => vote.optionId === option.id).length,
+    }));
+    return {
+      ...post,
+      poll: {
+        options,
+        my_vote: viewerId
+          ? list.find((vote) => vote.userId === viewerId)?.optionId ?? null
+          : null,
+        total: list.length,
+      },
+    } as T;
+  });
+}
+
+export type StoryItem = {
+  id: string;
+  author_id: string;
+  media_url: string;
+  media_type: "image" | "video";
+  caption: string | null;
+  created_at: string;
+  expires_at: string;
+};
+
+export type StoryGroup = {
+  author: Profile;
+  stories: StoryItem[];
+};
+
+/** Stories ativos de quem o usuário segue (e os próprios). */
+export async function fetchStories(viewerId: string): Promise<StoryGroup[]> {
+  const supabase = await createClient();
+
+  const { data: following } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", viewerId);
+
+  const ids = [viewerId, ...(following ?? []).map((row: any) => row.following_id as string)];
+
+  const { data } = await supabase
+    .from("stories")
+    .select("*, author:profiles!stories_author_id_fkey(*)")
+    .in("author_id", ids)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: true })
+    .limit(120);
+
+  if (!data) return [];
+
+  const groups = new Map<string, StoryGroup>();
+  for (const row of data as any[]) {
+    const author = row.author as Profile | null;
+    if (!author) continue;
+    const group = groups.get(author.id) ?? { author, stories: [] };
+    group.stories.push({
+      id: row.id,
+      author_id: row.author_id,
+      media_url: row.media_url,
+      media_type: row.media_type,
+      caption: row.caption,
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+    });
+    groups.set(author.id, group);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    if (a.author.id === viewerId) return -1;
+    if (b.author.id === viewerId) return 1;
+    return 0;
+  });
+}
+
+export async function fetchSavedPosts(userId: string): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  const { data: saves } = await supabase
+    .from("saved_posts")
+    .select("post_id, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (!saves || saves.length === 0) return [];
+
+  const ids = saves.map((row: any) => row.post_id as string);
+  const { data } = await supabase.from("posts").select(POST_SELECT).in("id", ids);
+  if (!data) return [];
+
+  const rows = data as unknown as RawPost[];
+  const position = new Map(ids.map((id, index) => [id, index]));
+  rows.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
+
+  const { liked, reposted, saved } = await getMyLikes(
+    rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean)),
+  );
+  return attachPollVotes(
+    await attachRepostedPosts(rows, liked, reposted, saved, userId),
+    userId,
+  );
+}
+
+export async function fetchProfileVisits(profileId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("profile_visit_stats", { p_user: profileId });
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    total: Number(row?.total_visits ?? 0),
+    unique: Number(row?.unique_visitors ?? 0),
+    recent: Number(row?.recent_visitors ?? 0),
+  };
 }
 
 export async function fetchProfileByUsername(username: string) {
@@ -244,16 +489,19 @@ export async function fetchFollowList(userId: string, kind: "followers" | "follo
 
 export async function fetchNotifications(userId: string): Promise<NotificationItem[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const blocked = await fetchBlockedIds();
+  let query = supabase
     .from("notifications")
     .select(
       `id, type, read_at, created_at, post_id, comment_id, conversation_id, community_id,
-       actor:profiles!notifications_actor_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, is_private, deactivated_at, created_at, updated_at),
+       actor:profiles!notifications_actor_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, location, accent_color, name_font, is_private, deactivated_at, created_at, updated_at),
        community:communities(slug, name)`,
     )
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(40);
+    .eq("user_id", userId);
+
+  if (blocked.length > 0) query = query.not("actor_id", "in", `(${blocked.join(",")})`);
+
+  const { data } = await query.order("created_at", { ascending: false }).limit(40);
   return (data ?? []) as unknown as NotificationItem[];
 }
 
@@ -293,7 +541,7 @@ export async function fetchConversations(userId: string): Promise<ConversationSu
   const supabase = await createClient();
   const { data: memberships } = await supabase
     .from("conversation_members")
-    .select("conversation_id, last_read_at, conversation:conversations(id, last_message_at)")
+    .select("conversation_id, last_read_at, conversation:conversations(id, last_message_at, title)")
     .eq("user_id", userId);
 
   if (!memberships || memberships.length === 0) return [];
@@ -301,16 +549,14 @@ export async function fetchConversations(userId: string): Promise<ConversationSu
   const summaries = await Promise.all(
     memberships.map(async (membership: any) => {
       const conversationId = membership.conversation_id as string;
-      const [{ data: otherMembers }, { data: lastMessages }, { count: unread }] = await Promise.all([
+      const [{ data: memberRows }, { data: lastMessages }, { count: unread }] = await Promise.all([
         supabase
           .from("conversation_members")
           .select("user:profiles!conversation_members_user_id_fkey(*)")
-          .eq("conversation_id", conversationId)
-          .neq("user_id", userId)
-          .limit(1),
+          .eq("conversation_id", conversationId),
         supabase
           .from("messages")
-          .select("body")
+          .select("body, attachment_type")
           .eq("conversation_id", conversationId)
           .order("created_at", { ascending: false })
           .limit(1),
@@ -322,11 +568,23 @@ export async function fetchConversations(userId: string): Promise<ConversationSu
           .neq("sender_id", userId),
       ]);
 
+      const members = ((memberRows ?? [])
+        .map((row: any) => row.user as Profile | null)
+        .filter(Boolean) as Profile[]);
+      const other = members.find((member) => member.id !== userId) ?? null;
+      const title = (membership.conversation?.title as string | null) ?? null;
+      const last = lastMessages?.[0];
+
       return {
         id: conversationId,
         last_message_at: membership.conversation?.last_message_at ?? new Date().toISOString(),
-        other: (otherMembers?.[0]?.user ?? null) as Profile | null,
-        last_message: lastMessages?.[0]?.body ?? null,
+        title,
+        is_group: Boolean(title) || members.length > 2,
+        members,
+        other,
+        last_message: last
+          ? last.body || (last.attachment_type === "gif" ? "GIF" : "Imagem")
+          : null,
         unread_count: unread ?? 0,
       } satisfies ConversationSummary;
     }),
@@ -380,12 +638,227 @@ export async function fetchCommunityBySlug(slug: string, viewerId?: string) {
   if (viewerId) {
     const { data: membership } = await supabase
       .from("community_members")
-      .select("role")
+      .select("role, status")
       .eq("community_id", community.id)
       .eq("user_id", viewerId)
       .maybeSingle();
-    community.is_member = Boolean(membership);
+    community.is_member = Boolean(membership) && (membership as any)?.status !== "pending";
     community.my_role = (membership as any)?.role ?? null;
+    community.my_status = (membership as any)?.status ?? null;
   }
   return community;
+}
+
+export type AlbumPhoto = {
+  id: string;
+  user_id: string;
+  photo_url: string;
+  caption: string | null;
+  created_at: string;
+};
+
+/** Álbum de fotos do perfil (mais recentes primeiro). */
+export async function fetchAlbum(profileId: string): Promise<AlbumPhoto[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profile_photos")
+    .select("id, user_id, photo_url, caption, created_at")
+    .eq("user_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(24);
+
+  return (data ?? []) as AlbumPhoto[];
+}
+
+export type WeeklyRankingRow = {
+  rank: number;
+  profile: Pick<Profile, "id" | "username" | "display_name" | "avatar_url" | "is_verified">;
+  points: number;
+  posts: number;
+  likes: number;
+};
+
+/** Ranking dos últimos 7 dias: posts, curtidas recebidas e novos seguidores. */
+export async function fetchWeeklyRanking(limit = 10): Promise<WeeklyRankingRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("weekly_ranking", { p_limit: limit });
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any, index: number) => ({
+    rank: index + 1,
+    profile: {
+      id: row.user_id,
+      username: row.username,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url,
+      is_verified: row.is_verified,
+    },
+    points: Number(row.points ?? 0),
+    posts: Number(row.posts ?? 0),
+    likes: Number(row.likes_received ?? 0),
+  }));
+}
+
+export type AchievementCounts = {
+  posts: number;
+  likes: number;
+  followers: number;
+  communities: number;
+  days: number;
+};
+
+export async function fetchAchievementCounts(profileId: string): Promise<AchievementCounts> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("profile_achievement_counts", { p_user: profileId });
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    posts: Number(row?.posts ?? 0),
+    likes: Number(row?.likes_received ?? 0),
+    followers: Number(row?.followers ?? 0),
+    communities: Number(row?.communities ?? 0),
+    days: Number(row?.days ?? 0),
+  };
+}
+
+/** Publicações antigas do próprio usuário no mesmo dia e mês ("nesse dia"). */
+export async function fetchMemories(viewerId: string): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  const cutoff = new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data } = await supabase
+    .from("posts")
+    .select(POST_SELECT)
+    .eq("author_id", viewerId)
+    .is("root_post_id", null)
+    .is("repost_of", null)
+    .lt("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(150);
+
+  if (!data) return [];
+
+  const now = new Date();
+  const rows = (data as unknown as RawPost[]).filter((row) => {
+    const date = new Date(row.created_at);
+    return date.getUTCDate() === now.getUTCDate() && date.getUTCMonth() === now.getUTCMonth();
+  }).slice(0, 3);
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
+  const { liked, reposted, saved, userId } = await getMyLikes(ids);
+  return attachPollVotes(await attachRepostedPosts(rows, liked, reposted, saved, userId), userId);
+}
+
+/** Atividade recente de quem o usuário segue. */
+export async function fetchFriendsActivity(viewerId: string): Promise<FeedPost[]> {
+  const supabase = await createClient();
+  const { data: following } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", viewerId)
+    .limit(200);
+
+  const ids = (following ?? []).map((row: any) => row.following_id as string);
+  if (ids.length === 0) return [];
+
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from("posts")
+    .select(POST_SELECT)
+    .in("author_id", ids)
+    .is("root_post_id", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (!data) return [];
+
+  const rows = data as unknown as RawPost[];
+  const postIds = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
+  const { liked, reposted, saved, userId } = await getMyLikes(postIds);
+  return attachPollVotes(await attachRepostedPosts(rows, liked, reposted, saved, userId), userId);
+}
+
+export type Retrospective = {
+  year: number;
+  posts: number;
+  likes: number;
+  followersGained: number;
+  topHashtag: string | null;
+  busiestMonth: string | null;
+  bestPost: { id: string; content: string; likes: number } | null;
+};
+
+/** Retrospectiva do ano corrente. */
+export async function fetchRetrospective(userId: string): Promise<Retrospective> {
+  const supabase = await createClient();
+  const year = new Date().getFullYear();
+  const start = `${year}-01-01T00:00:00.000Z`;
+
+  const [{ data: posts }, { count: followersGained }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("id, content, created_at, likes(count)")
+      .eq("author_id", userId)
+      .is("root_post_id", null)
+      .is("repost_of", null)
+      .gte("created_at", start)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("follows")
+      .select("follower_id", { count: "exact", head: true })
+      .eq("following_id", userId)
+      .gte("created_at", start),
+  ]);
+
+  const rows = (posts ?? []) as any[];
+  const counts = rows.map((row) => ({
+    id: row.id as string,
+    content: (row.content as string) ?? "",
+    created_at: row.created_at as string,
+    likes: Array.isArray(row.likes) ? Number(row.likes[0]?.count ?? 0) : Number(row.likes ?? 0),
+  }));
+
+  const likes = counts.reduce((sum, row) => sum + row.likes, 0);
+  const best = counts.reduce<Retrospective["bestPost"]>((top, row) => {
+    if (row.likes === 0) return top;
+    if (!top || row.likes > top.likes) {
+      return { id: row.id, content: row.content, likes: row.likes };
+    }
+    return top;
+  }, null);
+
+  const tagCounts = new Map<string, number>();
+  for (const row of counts) {
+    for (const match of row.content.matchAll(/#([\p{L}0-9_]{2,40})/gu)) {
+      const tag = match[1].toLowerCase();
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  const topHashtag =
+    [...tagCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  const monthCounts = new Map<number, number>();
+  for (const row of counts) {
+    const month = new Date(row.created_at).getMonth();
+    monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
+  }
+  const busiest = [...monthCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const monthName =
+    busiest === undefined
+      ? null
+      : new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(year, busiest, 1));
+
+  return {
+    year,
+    posts: counts.length,
+    likes,
+    followersGained: followersGained ?? 0,
+    topHashtag,
+    busiestMonth: monthName,
+    bestPost: best,
+  };
 }

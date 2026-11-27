@@ -1,20 +1,24 @@
 import Link from "next/link";
-import { ArrowRight, Compass } from "lucide-react";
+import { ArrowRight, Compass, Hash, Sparkles, Trophy, TrendingUp, Users2 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { FollowButton } from "@/components/follow-button";
 import { createClient } from "@/lib/supabase/server";
+import { fetchTrendingTags } from "@/lib/hashtags";
+import { fetchFriendsActivity } from "@/lib/queries";
 import type { Profile } from "@/lib/types";
 
 export async function RightRail({ viewerId }: { viewerId: string }) {
   const supabase = await createClient();
 
-  const [{ data: followRows }, { data: communityRows }] = await Promise.all([
+  const [{ data: followRows }, { data: communityRows }, trending, activity] = await Promise.all([
     supabase.from("follows").select("following_id").eq("follower_id", viewerId),
     supabase
       .from("communities")
       .select("id, slug, name, description, members:community_members(count)")
       .order("created_at", { ascending: false })
       .limit(4),
+    fetchTrendingTags(6),
+    fetchFriendsActivity(viewerId),
   ]);
 
   const followed = new Set((followRows ?? []).map((row: any) => row.following_id as string));
@@ -34,6 +38,99 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
 
   return (
     <div className="space-y-4">
+      <section className="chupa-card p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
+            <TrendingUp size={14} className="text-accent" /> Em alta
+          </h2>
+          <span className="text-[0.68rem] text-muted">7 dias</span>
+        </div>
+
+        {trending.length === 0 ? (
+          <p className="mt-3 text-xs text-muted">
+            Ainda sem assuntos em alta. Use #hashtags nas publicações para começar.
+          </p>
+        ) : (
+          <ol className="mt-3 space-y-1">
+            {trending.map((item, index) => (
+              <li key={item.tag}>
+                <Link
+                  href={`/hashtag/${encodeURIComponent(item.tag)}`}
+                  className="flex items-baseline gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 hover:bg-surface-2"
+                >
+                  <span className="w-3 text-[0.7rem] tabular-nums text-muted">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    <span className="text-accent">#</span>
+                    {item.tag}
+                  </span>
+                  <span className="text-[0.68rem] tabular-nums text-muted">
+                    {item.count} {item.count === 1 ? "post" : "posts"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <Link
+          href="/search?tab=publicacoes"
+          className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+        >
+          <Hash size={11} /> Explorar assuntos
+        </Link>
+      </section>
+
+      {activity.length > 0 && (
+        <section className="chupa-card p-4">
+          <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
+            <Users2 size={14} className="text-accent" /> Atividade dos amigos
+          </h2>
+          <ul className="mt-3 space-y-2.5">
+            {activity.map((post) => (
+              <li key={post.id} className="flex items-start gap-2">
+                <Avatar profile={post.author} size={28} />
+                <div className="min-w-0">
+                  <Link
+                    href={`/u/${post.author.username}`}
+                    className="text-xs font-medium hover:underline"
+                  >
+                    {post.author.display_name}
+                  </Link>
+                  <Link
+                    href={`/post/${post.id}`}
+                    className="block truncate text-xs text-muted hover:text-ink"
+                  >
+                    {post.content || "publicou uma mídia"}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="chupa-card p-4">
+        <h2 className="text-sm font-semibold">Descobrir</h2>
+        <ul className="mt-2 space-y-1">
+          <li>
+            <Link
+              href="/ranking"
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
+            >
+              <Trophy size={14} className="text-accent" /> Ranking da semana
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/retrospectiva"
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
+            >
+              <Sparkles size={14} className="text-accent" /> Sua retrospectiva
+            </Link>
+          </li>
+        </ul>
+      </section>
+
       <section className="chupa-card p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Quem seguir</h2>

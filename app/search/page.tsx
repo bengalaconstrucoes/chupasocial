@@ -6,7 +6,13 @@ import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { FollowButton } from "@/components/follow-button";
 import { PostCard } from "@/components/post-card";
-import { getMyLikes, normalizePost, POST_SELECT } from "@/lib/queries";
+import {
+  attachPollVotes,
+  fetchBlockedIds,
+  getMyLikes,
+  normalizePost,
+  POST_SELECT,
+} from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import { cn, formatCount } from "@/lib/utils";
 import type { Community, FeedPost, Profile } from "@/lib/types";
@@ -18,12 +24,23 @@ type Tab = "pessoas" | "publicacoes" | "comunidades";
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    tab?: string;
+    autor?: string;
+    desde?: string;
+    midia?: string;
+    ordem?: string;
+  }>;
 }) {
   const params = await searchParams;
   const q = (params.q ?? "").trim();
   const tab: Tab =
     params.tab === "publicacoes" || params.tab === "comunidades" ? params.tab : "pessoas";
+  const authorFilter = (params.autor ?? "").trim().replace(/^@/, "").toLowerCase();
+  const sinceFilter = (params.desde ?? "").trim();
+  const onlyMedia = params.midia === "1";
+  const popular = params.ordem === "popular";
 
   const supabase = await createClient();
   const {
@@ -34,16 +51,19 @@ export default async function SearchPage({
   let people: Array<Profile & { following?: boolean }> = [];
   let posts: FeedPost[] = [];
   let communities: Community[] = [];
+  const blocked = await fetchBlockedIds();
 
   if (q.length >= 2) {
     const term = `%${q}%`;
     if (tab === "pessoas") {
-      const { data } = await supabase
+      let peopleQuery = supabase
         .from("profiles")
         .select("*")
         .or(`username.ilike.${term},display_name.ilike.${term}`)
         .neq("id", user.id)
         .limit(25);
+      if (blocked.length > 0) peopleQuery = peopleQuery.not("id", "in", `(${blocked.join(",")})`);
+      const { data } = await peopleQuery;
       people = (data ?? []) as Profile[];
 
       if (people.length > 0) {
@@ -58,17 +78,53 @@ export default async function SearchPage({
     }
 
     if (tab === "publicacoes") {
-      const { data } = await supabase
+      let postsQuery = supabase
         .from("posts")
         .select(POST_SELECT)
         .ilike("content", term)
+        .is("root_post_id", null)
         .order("created_at", { ascending: false })
-        .limit(25);
+        .limit(popular || onlyMedia ? 60 : 25);
+      if (blocked.length > 0) postsQuery = postsQuery.not("author_id", "in", `(${blocked.join(",")})`);
+
+      if (authorFilter) {
+        const { data: author } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("username", authorFilter)
+          .maybeSingle();
+        postsQuery = author
+          ? postsQuery.eq("author_id", author.id)
+          : postsQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      if (sinceFilter && /^\d{4}-\d{2}-\d{2}$/.test(sinceFilter)) {
+        postsQuery = postsQuery.gte("created_at", `${sinceFilter}T00:00:00.000Z`);
+      }
+
+      if (onlyMedia) {
+        const { data: mediaRows } = await supabase
+          .from("post_media")
+          .select("post_id")
+          .limit(1000);
+        const mediaIds = [...new Set((mediaRows ?? []).map((row: any) => row.post_id as string))];
+        postsQuery = mediaIds.length
+          ? postsQuery.in("id", mediaIds)
+          : postsQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      const { data } = await postsQuery;
 
       if (data && data.length > 0) {
         const ids = data.map((row: any) => row.id);
-        const { liked, reposted } = await getMyLikes(ids);
-        posts = data.map((row) => normalizePost(row, liked, reposted));
+        const { liked, reposted, saved, userId } = await getMyLikes(ids);
+        posts = await attachPollVotes(
+          data.map((row) => normalizePost(row, liked, reposted, saved, userId)),
+          userId,
+        );
+        if (popular) {
+          posts.sort((a, b) => b.like_count + b.repost_count - (a.like_count + a.repost_count));
+        }
       }
     }
 
@@ -108,6 +164,44 @@ export default async function SearchPage({
               autoFocus={!q}
             />
           </div>
+
+          {tab === "publicacoes" && (
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <input
+                name="autor"
+                defaultValue={params.autor ?? ""}
+                placeholder="de @usuário"
+                className="field !py-1.5 text-xs"
+                aria-label="Filtrar por usuário"
+              />
+              <input
+                name="desde"
+                type="date"
+                defaultValue={params.desde ?? ""}
+                className="field !py-1.5 text-xs"
+                aria-label="A partir da data"
+              />
+              <label className="flex items-center gap-1.5 rounded-lg border border-line px-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  name="midia"
+                  value="1"
+                  defaultChecked={onlyMedia}
+                  className="accent-[var(--accent)]"
+                />
+                com mídia
+              </label>
+              <select
+                name="ordem"
+                defaultValue={popular ? "popular" : "recente"}
+                className="field !py-1.5 text-xs"
+                aria-label="Ordenar por"
+              >
+                <option value="recente">mais recentes</option>
+                <option value="popular">mais populares</option>
+              </select>
+            </div>
+          )}
         </form>
       </div>
 
@@ -115,7 +209,13 @@ export default async function SearchPage({
         {tabs.map((item) => (
           <Link
             key={item.key}
-            href={`/search?q=${encodeURIComponent(q)}&tab=${item.key}`}
+            href={`/search?q=${encodeURIComponent(q)}&tab=${item.key}${
+              item.key === "publicacoes"
+                ? `&autor=${encodeURIComponent(params.autor ?? "")}&desde=${encodeURIComponent(
+                    params.desde ?? "",
+                  )}&midia=${onlyMedia ? "1" : ""}&ordem=${popular ? "popular" : "recente"}`
+                : ""
+            }`}
             className={cn(
               "rounded-full px-3.5 py-1.5 text-sm font-medium",
               tab === item.key ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-ink",

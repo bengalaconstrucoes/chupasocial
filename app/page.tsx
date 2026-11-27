@@ -5,7 +5,9 @@ import { Composer } from "@/components/composer";
 import { FeedList } from "@/components/feed-list";
 import { Landing } from "@/components/landing";
 import { RightRail } from "@/components/right-rail";
-import { fetchFeed } from "@/lib/queries";
+import { StoryTray } from "@/components/stories";
+import { Memories } from "@/components/memories";
+import { fetchFeed, fetchMemories, fetchStories } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
@@ -66,15 +68,18 @@ export default async function HomePage({
   const profile = profileData as Profile;
   const tab = params.tab === "seguindo" ? "seguindo" : "todos";
 
-  const [posts, { data: membershipRows }] = await Promise.all([
+  const [posts, stories, memories, { data: membershipRows }] = await Promise.all([
     fetchFeed({
       mode: tab === "seguindo" ? "following" : "all",
       viewerId: user.id,
       limit: 12,
+      personalize: tab === "todos",
     }),
+    fetchStories(user.id),
+    fetchMemories(user.id),
     supabase
       .from("community_members")
-      .select("community_id, communities(id, name, slug)")
+      .select("community_id, communities(id, name, slug, image_url)")
       .eq("user_id", user.id)
       .limit(30),
   ]);
@@ -86,6 +91,7 @@ export default async function HomePage({
       id: community.id,
       name: community.name,
       slug: community.slug,
+      image_url: (community.image_url as string | null) ?? null,
     }));
 
   return (
@@ -117,6 +123,55 @@ export default async function HomePage({
           </Link>
         </div>
       </div>
+
+      {communities.length > 0 && (
+        <div className="border-b border-line bg-surface px-4 py-2.5 sm:px-5">
+          <ul className="flex items-center gap-3 overflow-x-auto pb-0.5">
+            <li className="shrink-0">
+              <Link
+                href="/communities"
+                className="flex flex-col items-center gap-1 text-[0.62rem] text-muted hover:text-accent"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-line text-lg">
+                  +
+                </span>
+                todas
+              </Link>
+            </li>
+            {communities.map((community) => (
+              <li key={community.id} className="shrink-0">
+                <Link
+                  href={`/communities/${community.slug}`}
+                  className="flex w-14 flex-col items-center gap-1 text-center"
+                  title={community.name}
+                >
+                  <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-line bg-accent-soft text-accent">
+                    {community.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={community.image_url}
+                        alt={`Foto da comunidade ${community.name}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-sm font-semibold">
+                        {community.name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </span>
+                  <span className="w-full truncate text-[0.62rem] text-muted">
+                    {community.name}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <StoryTray groups={stories} viewer={profile} />
+
+      <Memories posts={memories} />
 
       {params.aviso === "senha-atualizada" && (
         <p className="border-b border-line bg-surface px-4 py-2 text-sm text-ok sm:px-5">

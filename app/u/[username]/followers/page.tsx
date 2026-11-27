@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { FollowButton } from "@/components/follow-button";
+import { RemoveFollowerButton } from "@/components/remove-follower-button";
 import { fetchFollowList, fetchFollowState, fetchProfileByUsername } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,15 +68,21 @@ export default async function FollowersPage({
                 </Link>
                 <p className="truncate text-xs text-muted">@{person.username}</p>
               </div>
-              {person.id !== user.id && (
-                <FollowButton
-                  targetId={person.id}
-                  initialFollowing={states[index].following}
-                  initialRequested={states[index].requested}
-                  isPrivate={person.is_private}
-                  size="sm"
-                />
-              )}
+              {person.id !== user.id &&
+                (isOwner ? (
+                  <RemoveFollowerButton
+                    followerId={person.id}
+                    displayName={person.display_name}
+                  />
+                ) : (
+                  <FollowButton
+                    targetId={person.id}
+                    initialFollowing={states[index].following}
+                    initialRequested={states[index].requested}
+                    isPrivate={person.is_private}
+                    size="sm"
+                  />
+                ))}
             </li>
           ))}
         </ul>

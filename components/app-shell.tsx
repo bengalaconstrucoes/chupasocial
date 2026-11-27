@@ -2,8 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut, Settings } from "lucide-react";
 import { Avatar } from "@/components/avatar";
+import { CallProvider } from "@/components/call/call-provider";
 import { Logo } from "@/components/logo";
 import { MobileNav, SidebarNav } from "@/components/nav-links";
+import { PresenceHeartbeat } from "@/components/presence-heartbeat";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { signOutAction } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -43,7 +45,7 @@ export async function AppShell({
     fetchUnreadMessageCount(user.id),
   ]);
 
-  return (
+  const shell = (
     <div className="mx-auto flex w-full max-w-[1120px] gap-6 px-0 sm:px-4 lg:px-6">
       <aside className="sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col justify-between py-6 lg:flex">
         <div>
@@ -121,5 +123,12 @@ export async function AppShell({
         unreadMessages={unreadMessages}
       />
     </div>
+  );
+
+  return (
+    <CallProvider viewer={profile}>
+      <PresenceHeartbeat />
+      {shell}
+    </CallProvider>
   );
 }

@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { Composer } from "@/components/composer";
 import { CommunityJoinButton } from "@/components/community-join-button";
+import { LiveRoomCreate } from "@/components/live-room-create";
 import { FeedList } from "@/components/feed-list";
 import { fetchCommunityBySlug, fetchFeed } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -52,20 +53,29 @@ export default async function CommunityPage({
     .maybeSingle();
   if (!profileData) redirect("/login?erro=sessao");
 
-  const activeTab = tab === "membros" ? "membros" : "publicacoes";
+  const activeTab = tab === "membros" ? "membros" : tab === "salas" ? "salas" : "publicacoes";
   const canModerate = community.my_role === "owner" || community.my_role === "moderator";
 
-  const [posts, { data: members }] = await Promise.all([
+  const [posts, { data: members }, { data: rooms }] = await Promise.all([
     activeTab === "publicacoes"
       ? fetchFeed({ mode: "community", communityId: community.id, viewerId: user.id, limit: 12 })
       : Promise.resolve([]),
     activeTab === "membros"
       ? supabase
           .from("community_members")
-          .select("role, joined_at, user:profiles!community_members_user_id_fkey(*)")
+          .select("role, status, joined_at, user:profiles!community_members_user_id_fkey(*)")
           .eq("community_id", community.id)
+          .eq("status", "active")
           .order("joined_at", { ascending: true })
           .limit(100)
+      : Promise.resolve({ data: [] } as any),
+    activeTab === "salas"
+      ? supabase
+          .from("live_rooms")
+          .select("id, title, status, created_at, host:profiles!live_rooms_host_id_fkey(username, display_name)")
+          .eq("community_id", community.id)
+          .order("created_at", { ascending: false })
+          .limit(20)
       : Promise.resolve({ data: [] } as any),
   ]);
 
@@ -108,6 +118,8 @@ export default async function CommunityPage({
                 communityId={community.id}
                 isMember={Boolean(community.is_member)}
                 isOwner={community.my_role === "owner"}
+                requiresApproval={Boolean(community.requires_approval)}
+                pendingRequest={community.my_status === "pending"}
               />
             </div>
           </div>
@@ -132,6 +144,19 @@ export default async function CommunityPage({
             </p>
           )}
 
+          {(community.emojis ?? []).length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-1" aria-label="Emojis da comunidade">
+              {(community.emojis ?? []).map((emoji) => (
+                <li
+                  key={emoji}
+                  className="rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-sm"
+                >
+                  {emoji}
+                </li>
+              ))}
+            </ul>
+          )}
+
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
             <span className="inline-flex items-center gap-1">
               <Users size={13} /> {formatCount(community.member_count ?? 0)} membros
@@ -148,10 +173,15 @@ export default async function CommunityPage({
         {[
           { key: "publicacoes", label: "Publicações" },
           { key: "membros", label: "Membros" },
+          { key: "salas", label: "Ao vivo" },
         ].map((item) => (
           <Link
             key={item.key}
-            href={item.key === "publicacoes" ? `/communities/${community.slug}` : `/communities/${community.slug}?tab=membros`}
+            href={
+              item.key === "publicacoes"
+                ? `/communities/${community.slug}`
+                : `/communities/${community.slug}?tab=${item.key}`
+            }
             className={cn(
               "rounded-full px-3.5 py-1.5 text-sm font-medium",
               activeTab === item.key
@@ -172,6 +202,7 @@ export default async function CommunityPage({
               defaultCommunityId={community.id}
               communities={[{ id: community.id, name: community.name, slug: community.slug }]}
               placeholder={`Publicar em ${community.name}…`}
+              quickEmojis={community.emojis ?? []}
             />
           )}
           <FeedList
@@ -187,6 +218,42 @@ export default async function CommunityPage({
             }
           />
         </>
+      ) : activeTab === "salas" ? (
+        <div className="space-y-4 px-4 py-4 sm:px-5">
+          {canModerate && <LiveRoomCreate communityId={community.id} />}
+
+          {(rooms ?? []).length === 0 ? (
+            <p className="text-sm text-muted">
+              Nenhuma sala por aqui. {canModerate ? "Abra a primeira." : "Volte quando alguém abrir uma."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+              {(rooms ?? []).map((room: any) => (
+                <li key={room.id}>
+                  <Link
+                    href={`/communities/${community.slug}/rooms/${room.id}`}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2"
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        room.status === "live" ? "bg-emerald-500" : "bg-muted",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{room.title}</span>
+                      <span className="block truncate text-xs text-muted">
+                        por {room.host?.display_name ?? "alguém"} ·{" "}
+                        {room.status === "live" ? "ao vivo" : "encerrada"}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <ul className="divide-y divide-line">
           {(members ?? []).map((member: any) => {

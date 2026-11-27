@@ -13,14 +13,16 @@ export function FeedList({
   mode,
   profileId,
   communityId,
+  tag,
   emptyTitle,
   emptyDescription,
 }: {
   initialPosts: FeedPost[];
   viewerId: string;
-  mode: "all" | "following" | "profile" | "community";
+  mode: "all" | "following" | "profile" | "community" | "hashtag";
   profileId?: string;
   communityId?: string;
+  tag?: string;
   emptyTitle: string;
   emptyDescription: string;
 }) {
@@ -42,6 +44,7 @@ export function FeedList({
         before: last.created_at,
         profileId,
         communityId,
+        tag,
       });
       if (next.length === 0) {
         setDone(true);

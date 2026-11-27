@@ -9,16 +9,23 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
+  Quote,
   Repeat2,
   Share2,
   Trash2,
 } from "lucide-react";
 import {
   deletePostAction,
+  quoteRepostAction,
   toggleLikeAction,
   toggleRepostAction,
   updatePostAction,
 } from "@/lib/actions/posts";
+import { togglePinnedPostAction } from "@/lib/actions/features";
+import { ReportDialog } from "@/components/report-dialog";
+import { SavedPostButton } from "@/components/saved-post-button";
 import { cn, formatCount } from "@/lib/utils";
 
 type Props = {
@@ -32,6 +39,9 @@ type Props = {
   content: string;
   canEdit: boolean;
   showRepost?: boolean;
+  saved?: boolean;
+  isPinned?: boolean;
+  canPin?: boolean;
 };
 
 export function PostActions({
@@ -45,6 +55,9 @@ export function PostActions({
   content,
   canEdit,
   showRepost = true,
+  saved = false,
+  isPinned = false,
+  canPin = false,
 }: Props) {
   const router = useRouter();
   const [state, setState] = useState({
@@ -60,6 +73,10 @@ export function PostActions({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [repostOpen, setRepostOpen] = useState(false);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteDraft, setQuoteDraft] = useState("");
+  const [pinned, setPinned] = useState(isPinned);
 
   function flash(message: string) {
     setNotice(message);
@@ -111,6 +128,26 @@ export function PostActions({
     });
   }
 
+  function publishQuote() {
+    const trimmed = quoteDraft.trim();
+    if (!trimmed) {
+      flash("Escreva um comentário para citar.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await quoteRepostAction(postId, trimmed);
+      if (!result.ok) {
+        flash(result.error);
+        return;
+      }
+      setQuoting(false);
+      setQuoteDraft("");
+      router.refresh();
+      flash("Citação publicada");
+    });
+  }
+
   async function onShare() {
     const url = `${window.location.origin}/post/${postId}`;
     try {
@@ -150,6 +187,21 @@ export function PostActions({
       setEditing(false);
       router.refresh();
       flash("Publicação editada");
+    });
+  }
+
+  function togglePin() {
+    const next = !pinned;
+    setMenuOpen(false);
+    startTransition(async () => {
+      const result = await togglePinnedPostAction(next ? postId : null);
+      if (!result.ok) {
+        flash(result.error);
+        return;
+      }
+      setPinned(next);
+      router.refresh();
+      flash(next ? "Publicação fixada no perfil" : "Publicação desafixada");
     });
   }
 
@@ -227,19 +279,47 @@ export function PostActions({
         </button>
 
         {showRepost && (
-          <button
-            type="button"
-            onClick={onRepost}
-            aria-pressed={state.reposted}
-            aria-label={state.reposted ? "Desfazer repost" : "Repostar"}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-xs transition-colors hover:bg-surface-2 hover:text-ok",
-              state.reposted && "text-ok",
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setRepostOpen((value) => !value)}
+              aria-pressed={state.reposted}
+              aria-label="Repostar ou citar"
+              aria-expanded={repostOpen}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-xs transition-colors hover:bg-surface-2 hover:text-ok",
+                state.reposted && "text-ok",
+              )}
+            >
+              <Repeat2 size={17} />
+              <span className="tabular-nums">{state.repostCount > 0 ? formatCount(state.repostCount) : ""}</span>
+            </button>
+            {repostOpen && (
+              <div className="absolute bottom-full left-0 z-20 mb-1 w-44 overflow-hidden rounded-lg border border-line bg-surface text-sm shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRepostOpen(false);
+                    onRepost();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-2"
+                >
+                  <Repeat2 size={14} />
+                  {state.reposted ? "Desfazer repost" : "Repostar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRepostOpen(false);
+                    setQuoting(true);
+                  }}
+                  className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left hover:bg-surface-2"
+                >
+                  <Quote size={14} /> Citar publicação
+                </button>
+              </div>
             )}
-          >
-            <Repeat2 size={17} />
-            <span className="tabular-nums">{state.repostCount > 0 ? formatCount(state.repostCount) : ""}</span>
-          </button>
+          </div>
         )}
 
         <button
@@ -250,6 +330,8 @@ export function PostActions({
         >
           <Share2 size={16} />
         </button>
+
+        <SavedPostButton postId={postId} initialSaved={saved} />
 
         {(isOwner || canEdit) && (
           <div className="relative ml-auto">
@@ -276,6 +358,16 @@ export function PostActions({
                     <Pencil size={14} /> Editar
                   </button>
                 )}
+                {isOwner && canPin && (
+                  <button
+                    type="button"
+                    onClick={togglePin}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-2"
+                  >
+                    {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                    {pinned ? "Desafixar do perfil" : "Fixar no perfil"}
+                  </button>
+                )}
                 {isOwner && (
                   <button
                     type="button"
@@ -287,6 +379,16 @@ export function PostActions({
                   >
                     <Trash2 size={14} /> Excluir
                   </button>
+                )}
+                {!isOwner && (
+                  <div className="border-t border-line px-1 py-1">
+                    <ReportDialog
+                      targetType="post"
+                      targetId={postId}
+                      label="Denunciar publicação"
+                      className="w-full"
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -300,6 +402,42 @@ export function PostActions({
           </span>
         )}
       </div>
+
+      {quoting && (
+        <div className="mt-2 space-y-2 rounded-lg border border-line bg-surface-2 p-2.5">
+          <textarea
+            value={quoteDraft}
+            onChange={(event) => setQuoteDraft(event.target.value)}
+            rows={3}
+            maxLength={2000}
+            placeholder="Adicione um comentário a esta citação"
+            className="field text-sm"
+            aria-label="Comentário da citação"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={publishQuote}
+              disabled={pending || !quoteDraft.trim()}
+              className="btn btn-primary !px-3 !py-1.5 text-xs"
+            >
+              {pending ? <Loader2 size={13} className="animate-spin" /> : <Quote size={13} />}
+              Publicar citação
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQuoting(false);
+                setQuoteDraft("");
+              }}
+              className="btn btn-ghost !px-3 !py-1.5 text-xs"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {confirmDelete && (
         <div

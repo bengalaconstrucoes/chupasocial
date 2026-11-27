@@ -8,14 +8,14 @@ export const metadata: Metadata = { title: "Entrar" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; aviso?: string; erro?: string; email?: string }>;
+  searchParams: Promise<{ next?: string; aviso?: string; erro?: string; usuario?: string }>;
 }) {
   const params = await searchParams;
   const notice =
-    params.aviso === "confirme"
-      ? "Conta criada. Enviamos um link de confirmação para o seu e-mail — confirme para entrar."
+    params.aviso === "senha-redefinida"
+      ? "Senha alterada com seu código de recuperação. Entre com a nova senha."
       : params.erro === "link-invalido"
-        ? "O link expirou ou já foi usado. Solicite um novo e-mail."
+        ? "O link expirou ou já foi usado."
         : params.erro === "sessao"
           ? "Sua sessão expirou. Entre novamente."
           : undefined;
@@ -31,7 +31,7 @@ export default async function LoginPage({
       <LoginForm
         next={safeNext(params.next)}
         notice={notice}
-        initialEmail={params.email ?? ""}
+        initialIdentifier={params.usuario ?? ""}
       />
       <p className="text-center text-sm text-muted">
         Ainda não tem conta?{" "}

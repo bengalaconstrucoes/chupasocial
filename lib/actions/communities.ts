@@ -56,7 +56,7 @@ export async function toggleCommunityMembershipAction(
 
   const { data: community } = await supabase
     .from("communities")
-    .select("slug")
+    .select("slug, requires_approval")
     .eq("id", communityId)
     .maybeSingle();
   if (!community) return { ok: false, error: "Comunidade não encontrada." };
@@ -69,13 +69,22 @@ export async function toggleCommunityMembershipAction(
     .maybeSingle();
 
   if (!membership) {
-    const { error } = await supabase
-      .from("community_members")
-      .insert({ community_id: communityId, user_id: user.id, role: "member" });
+    const needsApproval = Boolean((community as any).requires_approval);
+    const { error } = await supabase.from("community_members").insert({
+      community_id: communityId,
+      user_id: user.id,
+      role: "member",
+      status: needsApproval ? "pending" : "active",
+    });
     if (error) return { ok: false, error: "Não foi possível entrar na comunidade." };
     revalidatePath(`/communities/${community.slug}`);
     revalidatePath("/communities");
-    return { ok: true, message: "Você entrou na comunidade." };
+    return {
+      ok: true,
+      message: needsApproval
+        ? "Pedido enviado. Aguarde a aprovação de um administrador."
+        : "Você entrou na comunidade.",
+    };
   }
 
   if (membership.role === "owner") {
@@ -185,4 +194,182 @@ export async function updateCommunityAction(formData: FormData): Promise<ActionR
   if (community?.slug) revalidatePath(`/communities/${community.slug}`);
   revalidatePath("/communities");
   return { ok: true, message: "Comunidade atualizada." };
+}
+
+export async function approveMemberAction(
+  communityId: string,
+  memberId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sua sessão expirou." };
+
+  const { data: community } = await supabase
+    .from("communities")
+    .select("slug, name")
+    .eq("id", communityId)
+    .maybeSingle();
+  if (!community) return { ok: false, error: "Comunidade não encontrada." };
+
+  const { error } = await supabase
+    .from("community_members")
+    .update({ status: "active" })
+    .eq("community_id", communityId)
+    .eq("user_id", memberId)
+    .eq("status", "pending");
+
+  if (error) return { ok: false, error: "Não foi possível aprovar o membro." };
+
+  await supabase.from("notifications").insert({
+    user_id: memberId,
+    actor_id: user.id,
+    type: "community",
+    community_id: communityId,
+  });
+
+  revalidatePath(`/communities/${community.slug}`);
+  revalidatePath(`/communities/${community.slug}/settings`);
+  return { ok: true, message: "Membro aprovado." };
+}
+
+export async function declineMemberAction(
+  communityId: string,
+  memberId: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sua sessão expirou." };
+
+  const { data: community } = await supabase
+    .from("communities")
+    .select("slug")
+    .eq("id", communityId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("community_members")
+    .delete()
+    .eq("community_id", communityId)
+    .eq("user_id", memberId)
+    .eq("status", "pending");
+
+  if (error) return { ok: false, error: "Não foi possível recusar o pedido." };
+
+  if (community?.slug) {
+    revalidatePath(`/communities/${community.slug}`);
+    revalidatePath(`/communities/${community.slug}/settings`);
+  }
+  return { ok: true, message: "Pedido recusado." };
+}
+
+export async function updateCommunityExtrasAction(
+  communityId: string,
+  requiresApproval: boolean,
+  emojis: string[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sua sessão expirou." };
+
+  const clean = [...new Set(emojis.map((emoji) => emoji.trim()).filter(Boolean))].slice(0, 12);
+  if (clean.some((emoji) => emoji.length > 8)) {
+    return { ok: false, error: "Cada emoji pode ter até 8 caracteres." };
+  }
+
+  const { data: community } = await supabase
+    .from("communities")
+    .select("slug")
+    .eq("id", communityId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("communities")
+    .update({ requires_approval: requiresApproval, emojis: clean })
+    .eq("id", communityId);
+
+  if (error) return { ok: false, error: "Não foi possível salvar as preferências." };
+
+  if (community?.slug) {
+    revalidatePath(`/communities/${community.slug}`);
+    revalidatePath(`/communities/${community.slug}/settings`);
+  }
+  return { ok: true, message: "Preferências salvas." };
+}
+
+export async function regenerateInviteAction(communityId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sua sessão expirou." };
+
+  const token = replaceToken();
+  const { error } = await supabase
+    .from("communities")
+    .update({ invite_token: token })
+    .eq("id", communityId);
+
+  if (error) return { ok: false, error: "Não foi possível gerar um novo convite." };
+
+  revalidatePath("/communities");
+  return { ok: true, message: "Novo link de convite gerado." };
+}
+
+function replaceToken() {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+}
+
+export async function joinCommunityByTokenAction(token: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Entre na sua conta para aceitar o convite." };
+
+  const clean = token.trim();
+  if (!/^[a-z0-9]{8,40}$/i.test(clean)) return { ok: false, error: "Convite inválido." };
+
+  const { data: community } = await supabase
+    .from("communities")
+    .select("id, slug, requires_approval")
+    .eq("invite_token", clean)
+    .maybeSingle();
+  if (!community) return { ok: false, error: "Este convite não existe mais." };
+
+  const { data: existing } = await supabase
+    .from("community_members")
+    .select("user_id, status")
+    .eq("community_id", community.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      ok: true,
+      message: existing.status === "pending" ? "Seu pedido já está aguardando aprovação." : "Você já está nesta comunidade.",
+    };
+  }
+
+  const needsApproval = Boolean((community as any).requires_approval);
+  const { error } = await supabase.from("community_members").insert({
+    community_id: community.id,
+    user_id: user.id,
+    role: "member",
+    status: needsApproval ? "pending" : "active",
+  });
+  if (error) return { ok: false, error: "Não foi possível entrar na comunidade." };
+
+  revalidatePath(`/communities/${community.slug}`);
+  return {
+    ok: true,
+    message: needsApproval
+      ? "Pedido enviado. Aguarde aprovação."
+      : "Você entrou na comunidade pelo convite.",
+  };
 }

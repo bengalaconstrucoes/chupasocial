@@ -33,6 +33,7 @@ const icons = {
   comment: MessageCircle,
   reply: AtSign,
   repost: Repeat2,
+  mention: AtSign,
   message: Bell,
   community: Users,
 } as const;
@@ -44,6 +45,7 @@ const labels: Record<NotificationItem["type"], string> = {
   comment: "comentou sua publicação",
   reply: "respondeu seu comentário",
   repost: "repostou sua publicação",
+  mention: "te mencionou em uma publicação",
   message: "te enviou uma mensagem",
   community: "entrou na sua comunidade",
 };

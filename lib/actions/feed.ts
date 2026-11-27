@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { FeedPost } from "@/lib/types";
 
 export async function loadMorePostsAction(options: {
-  mode: "all" | "following" | "profile" | "community";
+  mode: "all" | "following" | "profile" | "community" | "hashtag";
   before: string;
   profileId?: string;
   communityId?: string;
+  tag?: string;
 }): Promise<FeedPost[]> {
   const supabase = await createClient();
   const {
@@ -21,6 +22,7 @@ export async function loadMorePostsAction(options: {
     before: options.before,
     profileId: options.profileId,
     communityId: options.communityId,
+    tag: options.tag,
     viewerId: user.id,
     limit: 12,
   });

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
+import { normalizeAccent, normalizeNameFont } from "@/lib/profile-style";
 import { USERNAME_PATTERN } from "@/lib/utils";
 
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
@@ -19,19 +20,46 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   const website = String(formData.get("website") ?? "").trim();
   const avatarUrl = String(formData.get("avatar_url") ?? "").trim() || null;
   const bannerUrl = String(formData.get("banner_url") ?? "").trim() || null;
+  const location = String(formData.get("location") ?? "").trim();
+  const accentRaw = String(formData.get("accent_color") ?? "").trim();
+  const nameFont = normalizeNameFont(String(formData.get("name_font") ?? ""));
+  const flagRaw = String(formData.get("flag") ?? "").trim();
+  const statusEmoji = String(formData.get("status_emoji") ?? "").trim();
+  const statusText = String(formData.get("status_text") ?? "").trim();
+  const favoriteSong = String(formData.get("favorite_song") ?? "").trim();
+  const favoriteSongArtist = String(formData.get("favorite_song_artist") ?? "").trim();
+  const profileStyle = String(formData.get("profile_style") ?? "modern") === "y2k" ? "y2k" : "modern";
+  const showStats = formData.get("show_stats") === "on";
+  const showVisits = formData.get("show_visits") === "on";
 
   if (displayName.length < 2) return { ok: false, error: "Informe um nome com 2+ caracteres." };
   if (!USERNAME_PATTERN.test(username)) {
     return { ok: false, error: "Nome de usuário inválido (3–20, letras/números/_)." };
   }
   if (bio.length > 280) return { ok: false, error: "A bio pode ter até 280 caracteres." };
+  if (location.length > 60) return { ok: false, error: "A localização pode ter até 60 caracteres." };
+  if (statusText.length > 80) return { ok: false, error: "O status pode ter até 80 caracteres." };
+  if (statusEmoji.length > 8) return { ok: false, error: "Use um emoji curto no status." };
+  if (favoriteSong.length > 80 || favoriteSongArtist.length > 80) {
+    return { ok: false, error: "A música favorita pode ter até 80 caracteres." };
+  }
+  if (flagRaw && !/^[a-z0-9-]{2,24}$/.test(flagRaw)) {
+    return { ok: false, error: "Bandeira inválida." };
+  }
+  if (accentRaw && !normalizeAccent(accentRaw)) {
+    return { ok: false, error: "Cor de destaque inválida." };
+  }
   if (website && !/^https?:\/\/[^\s]+$/i.test(website)) {
     return { ok: false, error: "O site deve começar com http:// ou https://." };
   }
-  for (const url of [avatarUrl, bannerUrl]) {
-    if (url && !url.startsWith(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/`)) {
-      return { ok: false, error: "Endereço de imagem inválido." };
-    }
+  const storagePrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/`;
+  const isGiphy = (url: string) => /^https:\/\/([a-z0-9-]+\.)?giphy\.com\//i.test(url);
+
+  if (avatarUrl && !avatarUrl.startsWith(storagePrefix) && !isGiphy(avatarUrl)) {
+    return { ok: false, error: "Endereço de foto inválido." };
+  }
+  if (bannerUrl && !bannerUrl.startsWith(storagePrefix)) {
+    return { ok: false, error: "Endereço de banner inválido." };
   }
 
   const { error } = await supabase
@@ -41,6 +69,17 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       username,
       bio,
       website: website || null,
+      location: location || null,
+      accent_color: normalizeAccent(accentRaw),
+      name_font: nameFont,
+      flag: flagRaw || null,
+      status_text: statusText || null,
+      status_emoji: statusEmoji || null,
+      favorite_song: favoriteSong || null,
+      favorite_song_artist: favoriteSongArtist || null,
+      profile_style: profileStyle,
+      show_stats: showStats,
+      show_visits: showVisits,
       avatar_url: avatarUrl,
       banner_url: bannerUrl,
     })

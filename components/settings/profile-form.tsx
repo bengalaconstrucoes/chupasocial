@@ -2,10 +2,20 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2 } from "lucide-react";
+import { ImagePlus, Loader2, MapPin, Sparkles } from "lucide-react";
+import { FLAGS } from "@/lib/flags";
+import { Avatar } from "@/components/avatar";
+import { AvatarCrop } from "@/components/settings/avatar-crop";
+import { GifPicker } from "@/components/gif-picker";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfileAction } from "@/lib/actions/profile";
-import { fileExtension } from "@/lib/utils";
+import {
+  ACCENT_COLORS,
+  NAME_FONTS,
+  normalizeAccent,
+  profileAccentStyle,
+} from "@/lib/profile-style";
+import { cn, fileExtension } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
 
 export function ProfileForm({ profile }: { profile: Profile }) {
@@ -17,21 +27,44 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   const [username, setUsername] = useState(profile.username);
   const [bio, setBio] = useState(profile.bio);
   const [website, setWebsite] = useState(profile.website ?? "");
+  const [location, setLocation] = useState(profile.location ?? "");
+  const [accentColor, setAccentColor] = useState<string | null>(
+    normalizeAccent(profile.accent_color),
+  );
+  const [nameFont, setNameFont] = useState(profile.name_font || "default");
+  const [flag, setFlag] = useState(profile.flag ?? "");
+  const [statusEmoji, setStatusEmoji] = useState(profile.status_emoji ?? "");
+  const [statusText, setStatusText] = useState(profile.status_text ?? "");
+  const [favoriteSong, setFavoriteSong] = useState(profile.favorite_song ?? "");
+  const [favoriteSongArtist, setFavoriteSongArtist] = useState(
+    profile.favorite_song_artist ?? "",
+  );
+  const [profileStyle, setProfileStyle] = useState<string>(profile.profile_style ?? "modern");
+  const [showStats, setShowStats] = useState(profile.show_stats);
+  const [showVisits, setShowVisits] = useState(profile.show_visits);
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url);
   const [bannerUrl, setBannerUrl] = useState(profile.banner_url);
   const [uploading, setUploading] = useState<"avatar" | "banner" | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [gifOpen, setGifOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  async function upload(kind: "avatar" | "banner", file: File) {
+  const previewNameFont = NAME_FONTS.find((font) => font.id === nameFont)?.className ?? "";
+  const previewProfile = {
+    ...profile,
+    display_name: displayName || profile.display_name,
+    username,
+  };
+
+  async function upload(kind: "banner", file: File) {
     setError(null);
     setUploading(kind);
     const supabase = createClient();
-    const bucket = kind === "avatar" ? "avatars" : "banners";
     const path = `${profile.id}/${kind}-${Date.now()}.${fileExtension(file)}`;
     const { error: uploadError } = await supabase.storage
-      .from(bucket)
+      .from("banners")
       .upload(path, file, { contentType: file.type, upsert: true });
 
     if (uploadError) {
@@ -40,10 +73,46 @@ export function ProfileForm({ profile }: { profile: Profile }) {
       return;
     }
 
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    if (kind === "avatar") setAvatarUrl(data.publicUrl);
-    else setBannerUrl(data.publicUrl);
+    const { data } = supabase.storage.from("banners").getPublicUrl(path);
+    setBannerUrl(data.publicUrl);
     setUploading(null);
+  }
+
+  async function uploadAvatarBlob(blob: Blob, contentType: string, extension: string) {
+    setUploading("avatar");
+    setError(null);
+    const supabase = createClient();
+    const path = `${profile.id}/avatar-${Date.now()}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, blob, { contentType, cacheControl: "3600", upsert: true });
+
+    if (uploadError) {
+      setError(
+        contentType === "image/gif"
+          ? "Falha no upload do GIF. Use um arquivo de até 5 MB."
+          : "Falha no upload da foto.",
+      );
+      setUploading(null);
+      return;
+    }
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    setAvatarUrl(data.publicUrl);
+    setUploading(null);
+    setCropFile(null);
+  }
+
+  function uploadAvatar(blob: Blob) {
+    return uploadAvatarBlob(blob, "image/jpeg", "jpg");
+  }
+
+  function useGifAvatar(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      setError("O GIF da foto pode ter até 5 MB.");
+      return;
+    }
+    void uploadAvatarBlob(file, "image/gif", "gif");
   }
 
   function save() {
@@ -54,8 +123,19 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     formData.set("username", username);
     formData.set("bio", bio);
     formData.set("website", website);
+    formData.set("location", location);
+    formData.set("accent_color", accentColor ?? "");
+    formData.set("name_font", nameFont);
     formData.set("avatar_url", avatarUrl ?? "");
     formData.set("banner_url", bannerUrl ?? "");
+    formData.set("flag", flag);
+    formData.set("status_emoji", statusEmoji);
+    formData.set("status_text", statusText);
+    formData.set("favorite_song", favoriteSong);
+    formData.set("favorite_song_artist", favoriteSongArtist);
+    formData.set("profile_style", profileStyle);
+    if (showStats) formData.set("show_stats", "on");
+    if (showVisits) formData.set("show_visits", "on");
 
     startTransition(async () => {
       const result = await updateProfileAction(formData);
@@ -70,7 +150,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault();
         save();
@@ -122,39 +202,59 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative h-16 w-16 overflow-hidden rounded-full border border-line bg-surface-2">
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="Foto de perfil" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[0.65rem] text-muted">sem foto</div>
-          )}
-          {uploading === "avatar" && (
-            <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <Loader2 size={14} className="animate-spin text-white" />
-            </span>
-          )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Avatar profile={previewProfile} size={64} link={false} />
+        <div>
+          <input
+            ref={avatarInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                // GIF animado não passa pelo recorte (o canvas mataria a animação).
+                if (file.type === "image/gif") useGifAvatar(file);
+                else setCropFile(file);
+              }
+              event.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => avatarInput.current?.click()}
+            className="btn btn-ghost !px-3 !py-1.5 text-xs"
+          >
+            {uploading === "avatar" ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <ImagePlus size={13} />
+            )}
+            {uploading === "avatar" ? "Enviando" : "Trocar foto"}
+          </button>
+          <div className="relative mt-1.5">
+            <button
+              type="button"
+              onClick={() => setGifOpen((value) => !value)}
+              aria-expanded={gifOpen}
+              className="btn btn-quiet !px-2.5 !py-1 text-xs text-accent"
+            >
+              <Sparkles size={12} /> Usar GIF animado
+            </button>
+            {gifOpen && (
+              <GifPicker
+                onPick={(gif) => {
+                  setAvatarUrl(gif.url);
+                  setGifOpen(false);
+                }}
+                onClose={() => setGifOpen(false)}
+              />
+            )}
+          </div>
+          <p className="mt-1 text-[0.7rem] text-muted">
+            Você ajusta o zoom e o recorte antes de salvar. GIFs animados entram inteiros.
+          </p>
         </div>
-        <input
-          ref={avatarInput}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void upload("avatar", file);
-            event.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => avatarInput.current?.click()}
-          className="btn btn-ghost !px-3 !py-1.5 text-xs"
-        >
-          <ImagePlus size={13} /> Trocar foto
-        </button>
-        <p className="text-xs text-muted">JPG, PNG, WEBP ou GIF.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -204,24 +304,246 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         <p className="mt-1 text-right text-[0.7rem] text-muted">{280 - bio.length}</p>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="field-label" htmlFor="status_text">
+            Status personalizado
+          </label>
+          <input
+            id="status_text"
+            value={statusText}
+            onChange={(event) => setStatusText(event.target.value)}
+            maxLength={80}
+            className="field"
+            placeholder="ouvindo música, estudando…"
+          />
+        </div>
+        <div>
+          <label className="field-label" htmlFor="status_emoji">
+            Emoji do status
+          </label>
+          <input
+            id="status_emoji"
+            value={statusEmoji}
+            onChange={(event) => setStatusEmoji(event.target.value)}
+            maxLength={8}
+            className="field"
+            placeholder="🎧"
+          />
+        </div>
+      </div>
+
       <div>
-        <label className="field-label" htmlFor="website">
-          Site
+        <label className="field-label" htmlFor="flag">
+          Bandeira do perfil
         </label>
-        <input
-          id="website"
-          value={website}
-          onChange={(event) => setWebsite(event.target.value)}
-          maxLength={120}
+        <select
+          id="flag"
+          value={flag}
+          onChange={(event) => setFlag(event.target.value)}
           className="field"
-          placeholder="https://…"
-        />
+        >
+          <option value="">Sem bandeira</option>
+          <optgroup label="Estados brasileiros">
+            {FLAGS.filter((item) => item.group === "estados").map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label} ({item.code})
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Bandeiras históricas">
+            {FLAGS.filter((item) => item.group === "historicas").map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="field-label" htmlFor="favorite_song">
+            Música favorita
+          </label>
+          <input
+            id="favorite_song"
+            value={favoriteSong}
+            onChange={(event) => setFavoriteSong(event.target.value)}
+            maxLength={80}
+            className="field"
+            placeholder="Nome da música"
+          />
+        </div>
+        <div>
+          <label className="field-label" htmlFor="favorite_song_artist">
+            Artista
+          </label>
+          <input
+            id="favorite_song_artist"
+            value={favoriteSongArtist}
+            onChange={(event) => setFavoriteSongArtist(event.target.value)}
+            maxLength={80}
+            className="field"
+            placeholder="Quem canta"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="field-label" htmlFor="website">
+            Site
+          </label>
+          <input
+            id="website"
+            value={website}
+            onChange={(event) => setWebsite(event.target.value)}
+            maxLength={120}
+            className="field"
+            placeholder="https://…"
+          />
+        </div>
+        <div>
+          <label className="field-label" htmlFor="location">
+            Localização
+          </label>
+          <div className="relative">
+            <MapPin
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            />
+            <input
+              id="location"
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+              maxLength={60}
+              className="field pl-8"
+              placeholder="Cidade, país"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="rounded-xl border border-line p-3"
+        style={profileAccentStyle(accentColor)}
+      >
+        <span className="field-label">Cor do perfil</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAccentColor(null)}
+            className={cn(
+              "h-7 rounded-full border border-line px-2.5 text-[0.68rem] font-medium",
+              !accentColor ? "ring-2 ring-ink/40" : "text-muted",
+            )}
+          >
+            padrão
+          </button>
+          {ACCENT_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => setAccentColor(color)}
+              aria-label={`Usar a cor ${color}`}
+              aria-pressed={accentColor === color}
+              className={cn(
+                "h-7 w-7 rounded-full border border-black/10 transition-transform hover:scale-110",
+                accentColor === color && "ring-2 ring-offset-2 ring-ink/50",
+              )}
+              style={{ background: color }}
+            />
+          ))}
+        </div>
+        <p className="mt-2 text-[0.7rem] text-muted">
+          A cor vale para os botões e destaques do seu perfil.
+        </p>
+      </div>
+
+      <div className="space-y-2 rounded-xl border border-line p-3">
+        <span className="field-label !mb-0">Estilo do perfil</span>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "modern", label: "Moderno" },
+            { id: "y2k", label: "Anos 2000 ✨" },
+          ].map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              onClick={() => setProfileStyle(style.id)}
+              aria-pressed={profileStyle === style.id}
+              className={cn(
+                "rounded-lg border px-3 py-1.5 text-xs",
+                profileStyle === style.id
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-line text-muted hover:text-ink",
+              )}
+            >
+              {style.label}
+            </button>
+          ))}
+        </div>
+        <div className="space-y-1.5 border-t border-line pt-2 text-xs">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showStats}
+              onChange={(event) => setShowStats(event.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            Mostrar número de publicações para todos
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showVisits}
+              onChange={(event) => setShowVisits(event.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            Mostrar contador de visitas no perfil
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <span className="field-label">Fonte do nome</span>
+        <div className="flex flex-wrap gap-1.5">
+          {NAME_FONTS.map((font) => (
+            <button
+              key={font.id}
+              type="button"
+              onClick={() => setNameFont(font.id)}
+              aria-pressed={nameFont === font.id}
+              className={cn(
+                "rounded-lg border px-2.5 py-1.5 text-sm",
+                font.className,
+                nameFont === font.id
+                  ? "border-accent bg-accent-soft text-ink"
+                  : "border-line text-muted hover:text-ink",
+              )}
+            >
+              {font.label}
+            </button>
+          ))}
+        </div>
+        <p className={cn("mt-2 text-lg font-semibold leading-tight", previewNameFont)}>
+          {displayName || profile.display_name}
+        </p>
       </div>
 
       <button type="submit" disabled={pending || uploading !== null} className="btn btn-primary">
         {pending && <Loader2 size={14} className="animate-spin" />}
         Salvar perfil
       </button>
+
+      {cropFile && (
+        <AvatarCrop
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onDone={uploadAvatar}
+        />
+      )}
     </form>
   );
 }

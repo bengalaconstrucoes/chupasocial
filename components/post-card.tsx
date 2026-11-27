@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { Lock, Users } from "lucide-react";
 import { Avatar } from "@/components/avatar";
+import { VerifiedBadge } from "@/components/badges";
 import { PostActions } from "@/components/post-actions";
+import { PostMediaGrid } from "@/components/media-lightbox";
+import { PollBlock } from "@/components/poll-block";
+import { RichText } from "@/components/rich-text";
+import { nameFontClass } from "@/lib/profile-style";
 import { cn, timeAgo } from "@/lib/utils";
 import type { FeedPost } from "@/lib/types";
 
@@ -31,10 +36,11 @@ function PostBody({
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
             <Link
               href={`/u/${author.username}`}
-              className="truncate font-semibold hover:underline"
+              className={cn("truncate font-semibold hover:underline", nameFontClass(author.name_font))}
             >
               {author.display_name}
             </Link>
+            {author.is_verified && <VerifiedBadge size={14} />}
             {author.is_private && <Lock size={12} className="text-muted" aria-label="Perfil privado" />}
             <span className="truncate text-muted">@{author.username}</span>
             <span className="text-muted" aria-hidden>
@@ -58,48 +64,34 @@ function PostBody({
               <Users size={11} /> {post.community.name}
             </Link>
           )}
+
+          {post.collaborators && post.collaborators.length > 0 && (
+            <p className="mt-1 flex flex-wrap items-center gap-1 text-[0.7rem] text-muted">
+              <Users size={11} /> com
+              {post.collaborators.map((person, index) => (
+                <span key={person.id} className="inline-flex items-center gap-0.5">
+                  <Link href={`/u/${person.username}`} className="font-medium text-accent hover:underline">
+                    @{person.username}
+                  </Link>
+                  {person.is_verified && <VerifiedBadge size={10} />}
+                  {index < post.collaborators!.length - 1 ? "," : ""}
+                </span>
+              ))}
+            </p>
+          )}
         </div>
       </header>
 
       {post.content && (
-        <p className="prose-chupa mt-2 text-[0.98rem] leading-relaxed">{post.content}</p>
+        <p className="prose-chupa mt-2 text-[0.98rem] leading-relaxed">
+          <RichText text={post.content} />
+        </p>
       )}
 
-      {post.media.length > 0 && (
-        <div
-          className={cn(
-            "mt-3 grid gap-1 overflow-hidden rounded-xl border border-line",
-            post.media.length === 1
-              ? "grid-cols-1"
-              : post.media.length === 2
-                ? "grid-cols-2"
-                : "grid-cols-2",
-          )}
-        >
-          {post.media.map((media, index) => (
-            <a
-              key={media.id}
-              href={media.public_url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className={cn(
-                "block bg-surface-2",
-                post.media.length === 3 && index === 0 && "col-span-2",
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={media.public_url}
-                alt={`Imagem ${index + 1} da publicação de ${author.display_name}`}
-                loading="lazy"
-                className={cn(
-                  "w-full object-cover",
-                  post.media.length === 1 ? "max-h-[520px]" : "h-56",
-                )}
-              />
-            </a>
-          ))}
-        </div>
+      <PostMediaGrid media={post.media} authorName={author.display_name} />
+
+      {post.poll && post.poll.options.length > 0 && (
+        <PollBlock postId={post.id} initial={post.poll} />
       )}
 
       {!embedded && (
@@ -114,6 +106,9 @@ function PostBody({
           canEdit={canEdit}
           content={post.content}
           showRepost={!post.repost_of}
+          saved={post.saved_by_me}
+          isPinned={author.pinned_post_id === post.id}
+          canPin={isOwner && !post.root_post_id && !post.repost_of}
         />
       )}
 
@@ -144,7 +139,10 @@ export function PostCard({
         <div className="flex items-center justify-between gap-2 px-4 pt-3 text-[0.72rem] text-muted sm:px-5">
           <span className="inline-flex items-center gap-1.5">
             <Avatar profile={post.author} size={16} link={false} />
-            <Link href={`/u/${post.author.username}`} className="font-medium hover:underline">
+            <Link
+              href={`/u/${post.author.username}`}
+              className={cn("font-medium hover:underline", nameFontClass(post.author.name_font))}
+            >
               {post.author.display_name}
             </Link>
             <span>repostou</span>
@@ -161,6 +159,11 @@ export function PostCard({
         </p>
       ) : isRepost && inner ? (
         <div className="px-3 pb-3 pt-2 sm:px-4">
+          {post.content && (
+            <p className="prose-chupa mb-2 px-1 text-[0.95rem] leading-relaxed">
+              <RichText text={post.content} />
+            </p>
+          )}
           <PostBody post={inner} viewerId={viewerId} detail={false} embedded />
           <div className="mt-2 px-1">
             <PostActions
@@ -174,6 +177,7 @@ export function PostCard({
               canEdit={false}
               content=""
               showRepost={false}
+              saved={post.saved_by_me}
             />
           </div>
         </div>

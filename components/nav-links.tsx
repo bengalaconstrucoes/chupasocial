@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bell,
+  Bookmark,
   Compass,
   Home,
   Mail,
@@ -26,6 +27,7 @@ const baseItems = [
   { href: "/communities", label: "Comunidades", icon: Users, exact: false },
   { href: "/notifications", label: "Notificações", icon: Bell, exact: false },
   { href: "/messages", label: "Mensagens", icon: Mail, exact: false },
+  { href: "/saved", label: "Salvos", icon: Bookmark, exact: false },
 ];
 
 function isActive(pathname: string, href: string, exact: boolean) {

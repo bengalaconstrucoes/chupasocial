@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CommunityForm } from "@/components/community-form";
 import { CommunityMembersAdmin } from "@/components/community-members-admin";
+import { CommunityExtras } from "@/components/community-extras";
 import { fetchCommunityBySlug } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,12 +37,22 @@ export default async function CommunitySettingsPage({
     );
   }
 
-  const { data: memberRows } = await supabase
-    .from("community_members")
-    .select("role, joined_at, user:profiles!community_members_user_id_fkey(*)")
-    .eq("community_id", community.id)
-    .order("joined_at", { ascending: true })
-    .limit(100);
+  const [{ data: memberRows }, { data: pendingRows }] = await Promise.all([
+    supabase
+      .from("community_members")
+      .select("role, status, joined_at, user:profiles!community_members_user_id_fkey(*)")
+      .eq("community_id", community.id)
+      .eq("status", "active")
+      .order("joined_at", { ascending: true })
+      .limit(100),
+    supabase
+      .from("community_members")
+      .select("role, status, joined_at, user:profiles!community_members_user_id_fkey(*)")
+      .eq("community_id", community.id)
+      .eq("status", "pending")
+      .order("joined_at", { ascending: true })
+      .limit(100),
+  ]);
 
   return (
     <AppShell>
@@ -57,6 +68,21 @@ export default async function CommunitySettingsPage({
           <h2 className="mb-3 text-sm font-semibold">Informações</h2>
           <div className="chupa-card p-4">
             <CommunityForm mode="edit" community={community} userId={user.id} />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold">Acesso e convites</h2>
+          <div className="chupa-card p-4">
+            <CommunityExtras
+              communityId={community.id}
+              requiresApproval={Boolean(community.requires_approval)}
+              emojis={community.emojis ?? []}
+              inviteToken={community.invite_token ?? ""}
+              pendingMembers={((pendingRows ?? []) as any[])
+                .filter((row) => row.user)
+                .map((row) => ({ user: row.user, joined_at: row.joined_at }))}
+            />
           </div>
         </section>
 

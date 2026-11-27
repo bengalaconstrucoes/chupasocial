@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ForgotForm } from "@/components/auth/forms";
+import { RecoveryForm } from "@/components/auth/forms";
 
 export const metadata: Metadata = { title: "Recuperar senha" };
 
@@ -9,10 +9,11 @@ export default function ForgotPasswordPage() {
       <div>
         <h1 className="text-2xl font-semibold">Recuperar senha</h1>
         <p className="mt-1 text-sm text-muted">
-          Informe o e-mail da conta e enviaremos um link para você criar uma nova senha.
+          Entre com seu usuário e o código secreto que você guardou no cadastro para definir uma
+          nova senha.
         </p>
       </div>
-      <ForgotForm />
+      <RecoveryForm />
     </div>
   );
 }

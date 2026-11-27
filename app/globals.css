@@ -62,11 +62,15 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+html {
+  background: var(--bg);
 }
 
 ::selection {
@@ -244,4 +248,101 @@ h1, h2, h3, h4 {
 .prose-chupa {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Fontes escolhidas para o nome do perfil */
+.name-font-serif {
+  font-family: Georgia, "Times New Roman", ui-serif, serif;
+}
+
+.name-font-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: -0.02em;
+}
+
+.name-font-rounded {
+  font-family: ui-rounded, "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+}
+
+.name-font-condensed {
+  font-family: "Arial Narrow", "Roboto Condensed", "Barlow Condensed", "Segoe UI", sans-serif;
+  letter-spacing: 0.005em;
+}
+
+/* Perfil estilo anos 2000 */
+.chupa-y2k {
+  background-image:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--accent) 18%, transparent) 0, transparent 42%),
+    radial-gradient(circle at 88% 0%, color-mix(in srgb, #64c8ff 20%, transparent) 0, transparent 45%);
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.chupa-y2k-name {
+  background: linear-gradient(90deg, var(--accent), #64c8ff 55%, var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+/* Temas de fundo (neve, estrelas, bolhas) */
+:root {
+  --fx-particle: #9aa4bb;
+}
+
+[data-theme="dark"] {
+  --fx-particle: #ffffff;
+}
+
+.chupa-fx {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.chupa-fx-dot {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: var(--fx-particle);
+  will-change: transform, opacity;
+}
+
+.chupa-fx-snow .chupa-fx-dot {
+  animation-name: fx-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  filter: blur(0.4px);
+}
+
+.chupa-fx-bubbles .chupa-fx-dot {
+  background: transparent;
+  border: 1px solid var(--fx-particle);
+  animation-name: fx-rise;
+  animation-timing-function: ease-in;
+  animation-iteration-count: infinite;
+}
+
+.chupa-fx-stars .chupa-fx-dot {
+  animation-name: fx-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fx-fall {
+  0% { transform: translate3d(0, -12vh, 0); }
+  100% { transform: translate3d(7vw, 112vh, 0); }
+}
+
+@keyframes fx-rise {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate3d(3vw, -115vh, 0); opacity: 0; }
+}
+
+@keyframes fx-twinkle {
+  0%, 100% { opacity: 0.18; transform: scale(0.85); }
+  50% { opacity: 0.9; transform: scale(1.3); }
 }
