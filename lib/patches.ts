@@ -8,6 +8,17 @@ export type Patch = {
 /** Registro de atualizações do site, exibido em /patches. */
 export const PATCHES: Patch[] = [
   {
+    version: "0.6.1",
+    date: "2026-11-27",
+    title: "Feed que não repete o que você já viu",
+    highlights: [
+      "O \"Para você\" passou a lembrar das publicações que já apareceram para você e deixa elas para o fim da fila.",
+      "Repost e publicação original não aparecem mais duplicados na mesma página.",
+      "A ordem varia um pouco entre recargas, em vez de ficar sempre igual.",
+      "O player do perfil toca escondido: só play/pause, nome da música e artista.",
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-11-27",
     title: "Abas do perfil, comunidades privadas e molduras fofas",

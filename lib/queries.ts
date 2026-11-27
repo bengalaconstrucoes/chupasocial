@@ -190,7 +190,9 @@ export async function fetchFeed(options: {
   const filter = options.filter ?? "all";
   const supabase = await createClient();
   const limit = options.limit ?? 12;
-  const fetchLimit = options.personalize && options.viewerId ? Math.min(60, limit * 4) : limit;
+  // Buscamos bem mais candidatos no "Para você": assim dá para descartar o que a
+  // pessoa já viu e ainda encher a primeira página.
+  const fetchLimit = options.personalize && options.viewerId ? Math.min(96, limit * 6) : limit;
   const blocked = await fetchBlockedIds();
 
   let authorIds: string[] | null = null;
@@ -282,12 +284,43 @@ async function personalizePosts(
   if (posts.length <= 1) return posts;
 
   const supabase = await createClient();
-  const [{ data: followingRows }, { data: followerRows }, { data: membershipRows }] =
+  const candidateIds = [
+    ...new Set(
+      posts
+        .flatMap((post) => [post.id, post.repost_of, post.reposted_post?.id])
+        .filter(Boolean) as string[],
+    ),
+  ];
+
+  const [{ data: followingRows }, { data: followerRows }, { data: membershipRows }, { data: viewRows }] =
     await Promise.all([
       supabase.from("follows").select("following_id").eq("follower_id", viewerId),
       supabase.from("follows").select("follower_id").eq("following_id", viewerId),
       supabase.from("community_members").select("community_id").eq("user_id", viewerId),
+      candidateIds.length > 0
+        ? supabase
+            .from("post_views")
+            .select("post_id")
+            .eq("viewer_id", viewerId)
+            .in("post_id", candidateIds)
+        : Promise.resolve({ data: [] as Array<{ post_id: string }> }),
     ]);
+
+  // Já viu: o post em si ou o original que ele reposta.
+  const seen = new Set((viewRows ?? []).map((row: any) => row.post_id as string));
+  const alreadySeen = (post: FeedPost) =>
+    seen.has(post.id) ||
+    Boolean(post.repost_of && seen.has(post.repost_of)) ||
+    Boolean(post.reposted_post?.id && seen.has(post.reposted_post.id));
+
+  // Sem conteúdo repetido na mesma página (repost + original, por exemplo).
+  const contentSeen = new Set<string>();
+  const uniquePosts = posts.filter((post) => {
+    const key = post.repost_of ?? post.reposted_post?.id ?? post.id;
+    if (contentSeen.has(key)) return false;
+    contentSeen.add(key);
+    return true;
+  });
 
   const following = new Set((followingRows ?? []).map((row: any) => row.following_id as string));
   const mutual = new Set(
@@ -300,7 +333,7 @@ async function personalizePosts(
   );
   const now = Date.now();
 
-  const scored = posts.map((post) => {
+  const scored = uniquePosts.map((post) => {
     const hours = Math.max(0, (now - new Date(post.created_at).getTime()) / 3_600_000);
     const engagement = post.like_count + post.comment_count * 1.6 + post.repost_count * 2.2;
 
@@ -316,13 +349,21 @@ async function personalizePosts(
 
     const communityBoost = post.community_id && communities.has(post.community_id) ? 0.9 : 0;
 
+    // Um sopro de aleatoriedade para o feed não ficar idêntico a cada recarga.
+    const shake = Math.random() * 0.7;
+
     return {
       post,
-      score: freshness + engagementScore + views + affinity + communityBoost,
+      seen: alreadySeen(post),
+      score: freshness + engagementScore + views + affinity + communityBoost + shake,
     };
   });
 
-  scored.sort((a, b) => b.score - a.score);
+  // O que já passou pela tela vai para o fim da fila; só volta se faltar conteúdo.
+  scored.sort((a, b) => {
+    if (a.seen !== b.seen) return a.seen ? 1 : -1;
+    return b.score - a.score;
+  });
 
   // Diversidade: no máximo 2 posts do mesmo autor na primeira passada.
   const chosen: FeedPost[] = [];
