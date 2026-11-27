@@ -9,6 +9,18 @@ import { normalizeAvatarFrame } from "@/lib/avatar-frames";
 import { parseMusicUrl } from "@/lib/music";
 import { USERNAME_PATTERN } from "@/lib/utils";
 
+function parseStringList(value: FormDataEntryValue | null): string[] {
+  const raw = String(value ?? "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.map((item) => String(item ?? "").trim()).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -39,6 +51,13 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   const favoriteSongArtist = String(formData.get("favorite_song_artist") ?? "").trim();
   const songUrl = String(formData.get("song_url") ?? "").trim() || null;
   const avatarFrame = normalizeAvatarFrame(String(formData.get("avatar_frame") ?? "none"));
+  const bannerFocusRaw = Number(formData.get("banner_focus") ?? 50);
+  const bannerFocus = Number.isFinite(bannerFocusRaw)
+    ? Math.min(100, Math.max(0, Math.round(bannerFocusRaw)))
+    : 50;
+  const songTextColor = String(formData.get("song_text_color") ?? "").trim();
+  const songBubbleColor = String(formData.get("song_bubble_color") ?? "").trim();
+  const hiddenBadges = parseStringList(formData.get("hidden_badges")).slice(0, 40);
   const profileStyle = String(formData.get("profile_style") ?? "modern") === "y2k" ? "y2k" : "modern";
   const showStats = formData.get("show_stats") === "on";
   const showVisits = formData.get("show_visits") === "on";
@@ -84,6 +103,15 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   if (avatarFrame === "admin" && !profileIsAdmin) {
     return { ok: false, error: "A moldura da equipe é reservada para a administração." };
   }
+  if (songTextColor && !/^#[0-9a-f]{6}$/i.test(songTextColor)) {
+    return { ok: false, error: "Cor da letra inválida." };
+  }
+  if (songBubbleColor && !/^#[0-9a-f]{6}$/i.test(songBubbleColor)) {
+    return { ok: false, error: "Cor do balãozinho inválida." };
+  }
+  if (hiddenBadges.some((badge) => !/^[a-z0-9-]{2,40}$/.test(badge))) {
+    return { ok: false, error: "Emblema inválido." };
+  }
 
   const { error } = await supabase
     .from("profiles")
@@ -102,6 +130,10 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       favorite_song_artist: favoriteSongArtist || null,
       song_url: songUrl,
       avatar_frame: avatarFrame,
+      banner_focus: bannerFocus,
+      song_text_color: songTextColor || null,
+      song_bubble_color: songBubbleColor || null,
+      hidden_badges: hiddenBadges,
       profile_style: profileStyle,
       show_stats: showStats,
       show_visits: showVisits,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Compass, Settings2, ShieldCheck, Users } from "lucide-react";
+import { Compass, Lock, Settings2, ShieldCheck, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { Composer } from "@/components/composer";
@@ -55,9 +55,11 @@ export default async function CommunityPage({
 
   const activeTab = tab === "membros" ? "membros" : tab === "salas" ? "salas" : "publicacoes";
   const canModerate = community.my_role === "owner" || community.my_role === "moderator";
+  // Comunidade privada: publicações só para quem foi aceito.
+  const locked = Boolean(community.is_private) && !community.is_member;
 
   const [posts, { data: members }, { data: rooms }] = await Promise.all([
-    activeTab === "publicacoes"
+    activeTab === "publicacoes" && !locked
       ? fetchFeed({ mode: "community", communityId: community.id, viewerId: user.id, limit: 12 })
       : Promise.resolve([]),
     activeTab === "membros"
@@ -82,10 +84,19 @@ export default async function CommunityPage({
   return (
     <AppShell>
       <section className="border-b border-line bg-surface">
-        <div className="relative h-28 overflow-hidden bg-surface-2">
-          {community.image_url ? (
+        <div className="relative h-32 overflow-hidden bg-surface-2 sm:h-40">
+          {community.banner_url || community.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={community.image_url} alt="" className="h-full w-full object-cover" />
+            <img
+              src={community.banner_url ?? community.image_url ?? ""}
+              alt=""
+              className="h-full w-full object-cover"
+              style={{
+                objectPosition: `50% ${
+                  community.banner_url ? community.banner_focus ?? 50 : 50
+                }%`,
+              }}
+            />
           ) : (
             <div
               className="h-full w-full"
@@ -134,6 +145,11 @@ export default async function CommunityPage({
             {community.my_role === "moderator" && (
               <span className="chip !py-0.5">
                 <ShieldCheck size={11} /> moderador
+              </span>
+            )}
+            {community.is_private && (
+              <span className="chip !py-0.5">
+                <Lock size={11} /> privada
               </span>
             )}
           </div>
@@ -195,6 +211,25 @@ export default async function CommunityPage({
       </div>
 
       {activeTab === "publicacoes" ? (
+        locked ? (
+          <div className="px-6 py-14 text-center">
+            <Lock size={26} className="mx-auto text-muted" />
+            <h2 className="mt-3 text-lg font-semibold">Comunidade privada</h2>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+              As publicações desta comunidade são só para quem foi aceito. Peça para entrar e
+              aguarde a aprovação.
+            </p>
+            <div className="mt-5 flex justify-center">
+              <CommunityJoinButton
+                communityId={community.id}
+                isMember={Boolean(community.is_member)}
+                isOwner={community.my_role === "owner"}
+                requiresApproval={Boolean(community.requires_approval)}
+                pendingRequest={community.my_status === "pending"}
+              />
+            </div>
+          </div>
+        ) : (
         <>
           {community.is_member && (
             <Composer
@@ -218,6 +253,7 @@ export default async function CommunityPage({
             }
           />
         </>
+        )
       ) : activeTab === "salas" ? (
         <div className="space-y-4 px-4 py-4 sm:px-5">
           {canModerate && <LiveRoomCreate communityId={community.id} />}

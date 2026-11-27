@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Compass, Plus } from "lucide-react";
+import { Compass, Lock, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { CommunityJoinButton } from "@/components/community-join-button";
@@ -61,8 +61,14 @@ export default async function CommunitiesPage() {
               </Link>
 
               <div className="min-w-0 flex-1">
-                <Link href={`/communities/${community.slug}`} className="text-sm font-semibold hover:underline">
+                <Link
+                  href={`/communities/${community.slug}`}
+                  className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
+                >
                   {community.name}
+                  {community.is_private && (
+                    <Lock size={11} className="text-muted" aria-label="Comunidade privada" />
+                  )}
                 </Link>
                 <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">
                   {community.description || "Sem descrição por enquanto."}

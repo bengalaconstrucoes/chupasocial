@@ -17,18 +17,21 @@ type PendingMember = { user: Profile; joined_at: string };
 export function CommunityExtras({
   communityId,
   requiresApproval,
+  isPrivate,
   emojis,
   inviteToken,
   pendingMembers,
 }: {
   communityId: string;
   requiresApproval: boolean;
+  isPrivate: boolean;
   emojis: string[];
   inviteToken: string;
   pendingMembers: PendingMember[];
 }) {
   const router = useRouter();
   const [approval, setApproval] = useState(requiresApproval);
+  const [privateMode, setPrivateMode] = useState(isPrivate);
   const [emojiList, setEmojiList] = useState(emojis.join(" "));
   const [token, setToken] = useState(inviteToken);
   const [origin, setOrigin] = useState("");
@@ -52,7 +55,7 @@ export function CommunityExtras({
       .filter(Boolean);
 
     startTransition(async () => {
-      const result = await updateCommunityExtrasAction(communityId, approval, list);
+      const result = await updateCommunityExtrasAction(communityId, approval, list, privateMode);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -102,7 +105,21 @@ export function CommunityExtras({
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="space-y-3">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={privateMode}
+            onChange={(event) => setPrivateMode(event.target.checked)}
+            className="mt-0.5 accent-[var(--accent)]"
+          />
+          <span>
+            <span className="font-medium">Comunidade privada</span>
+            <span className="block text-xs text-muted">
+              As publicações ficam visíveis só para quem foi aceito na comunidade.
+            </span>
+          </span>
+        </label>
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"

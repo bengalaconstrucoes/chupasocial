@@ -11,6 +11,7 @@ import { FeedbackBox } from "@/components/feedback-box";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSyntheticEmail } from "@/lib/account-recovery";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAchievementCounts } from "@/lib/queries";
 import { formatDate } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
 
@@ -27,7 +28,10 @@ export default async function SettingsPage() {
   if (!data) redirect("/login?erro=sessao");
   const profile = data as Profile;
 
-  const { data: hasRecoveryCode } = await supabase.rpc("has_recovery_code");
+  const [{ data: hasRecoveryCode }, achievements] = await Promise.all([
+    supabase.rpc("has_recovery_code"),
+    fetchAchievementCounts(profile.id),
+  ]);
 
   return (
     <AppShell>
@@ -48,7 +52,7 @@ export default async function SettingsPage() {
             </Link>
           </div>
           <div className="chupa-card p-4 sm:p-5">
-            <ProfileForm profile={profile} />
+            <ProfileForm profile={profile} achievements={achievements} />
           </div>
         </section>
 

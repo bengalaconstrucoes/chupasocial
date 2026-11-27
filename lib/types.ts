@@ -18,6 +18,10 @@ export type Profile = {
   favorite_song_artist: string | null;
   song_url?: string | null;
   avatar_frame?: string | null;
+  banner_focus?: number | null;
+  hidden_badges?: string[] | null;
+  song_text_color?: string | null;
+  song_bubble_color?: string | null;
   muted_until?: string | null;
   pinned_post_id: string | null;
   show_stats: boolean;
@@ -68,6 +72,8 @@ export type FeedPost = Post & {
   saved_by_me: boolean;
   community: { id: string; slug: string; name: string } | null;
   reposted_post?: FeedPost | null;
+  /** Publicação respondida, mostrada acima da resposta (estilo Twitter). */
+  parent_post?: FeedPost | null;
   collaborators?: Array<Pick<Profile, "id" | "username" | "display_name" | "avatar_url" | "is_verified">>;
   poll?: PostPoll | null;
 };
@@ -103,6 +109,9 @@ export type Community = {
   name: string;
   description: string;
   image_url: string | null;
+  banner_url?: string | null;
+  banner_focus?: number | null;
+  is_private?: boolean;
   creator_id: string;
   created_at: string;
   member_count?: number;

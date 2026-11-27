@@ -92,18 +92,23 @@ h1, h2, h3, h4 {
    agora conseguem sobrescrever o padrão sem brigar com o ícone do campo. */
 @layer components {
 
-/* Superfícies */
+/* Superfícies — vidro suave (liquid glass) */
 .chupa-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.03), 0 12px 30px -26px rgb(0 0 0 / 0.5);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
 }
 
 .chupa-panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 18px;
   box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
 }
 
 /* Botões */
@@ -117,7 +122,7 @@ h1, h2, h3, h4 {
   font-weight: 600;
   line-height: 1;
   padding: 0.65rem 1.05rem;
-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
   cursor: pointer;
   border: 1px solid transparent;
 }
@@ -443,9 +448,20 @@ h1, h2, h3, h4 {
 }
 
 .pfp-frame-inner {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   background: var(--surface-2);
+}
+
+/* Enfeites das molduras (orelhinhas, estrelinhas…) */
+.pfp-frame::before,
+.pfp-frame::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .pfp-frame-gold {
@@ -476,6 +492,154 @@ h1, h2, h3, h4 {
 .pfp-frame-admin {
   background: linear-gradient(135deg, #7c3aed, #c084fc 50%, #6d28d9);
   box-shadow: 0 0 0 1px rgb(124 58 237 / 0.4), 0 0 12px -2px rgb(124 58 237 / 0.6);
+}
+
+/* Fofas, estilo Discord */
+.pfp-frame-cat {
+  background: linear-gradient(150deg, #ffd9ec, #f9a8d4 45%, #f472b6);
+  box-shadow: 0 0 12px -3px rgb(244 114 182 / 0.7);
+}
+
+.pfp-frame-cat::before,
+.pfp-frame-cat::after {
+  top: -15%;
+  width: 38%;
+  height: 38%;
+  background: linear-gradient(180deg, #ffe4f1, #f472b6);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.pfp-frame-cat::before {
+  left: 2%;
+  transform: rotate(-12deg);
+}
+
+.pfp-frame-cat::after {
+  right: 2%;
+  transform: rotate(12deg);
+}
+
+.pfp-frame-bunny {
+  background: linear-gradient(150deg, #fff1f7, #fbcfe8 55%, #f9a8d4);
+  box-shadow: 0 0 12px -3px rgb(251 207 232 / 0.9);
+}
+
+.pfp-frame-bunny::before,
+.pfp-frame-bunny::after {
+  top: -40%;
+  width: 24%;
+  height: 52%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff, #fbcfe8);
+  border: 1px solid rgb(249 168 212 / 0.7);
+}
+
+.pfp-frame-bunny::before {
+  left: 14%;
+  transform: rotate(-10deg);
+}
+
+.pfp-frame-bunny::after {
+  right: 14%;
+  transform: rotate(10deg);
+}
+
+.pfp-frame-rose {
+  background:
+    radial-gradient(circle at 22% 30%, #ffe3ef 0 12%, transparent 13%),
+    radial-gradient(circle at 70% 20%, #ffc9dd 0 10%, transparent 11%),
+    linear-gradient(135deg, #ffd0e2, #f472b6 48%, #b21e63);
+  box-shadow: 0 0 14px -3px rgb(244 114 182 / 0.75);
+}
+
+.pfp-frame-rose::after {
+  content: "❀";
+  right: -8%;
+  bottom: -6%;
+  font-size: 60%;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgb(178 30 99 / 0.6);
+}
+
+.pfp-frame-sakura {
+  background: linear-gradient(140deg, #ffeaf3, #ffb7d5 50%, #f7a8c4);
+  box-shadow: 0 0 12px -4px rgb(255 183 213 / 0.9);
+}
+
+.pfp-frame-hearts {
+  background: linear-gradient(140deg, #ff8fb1, #ff3d7f 60%, #ff8fb1);
+  box-shadow: 0 0 12px -2px rgb(255 61 127 / 0.6);
+}
+
+.pfp-frame-hearts::before {
+  content: "♥";
+  top: -14%;
+  right: -8%;
+  font-size: 46%;
+  color: #ff3d7f;
+  text-shadow: 0 1px 0 #fff;
+}
+
+.pfp-frame-stars {
+  background: linear-gradient(140deg, #fff3c4, #fbbf24 55%, #f59e0b);
+  box-shadow: 0 0 12px -3px rgb(251 191 36 / 0.75);
+}
+
+.pfp-frame-stars::before {
+  content: "✦";
+  top: -18%;
+  left: -6%;
+  font-size: 44%;
+  color: #fffbe8;
+  text-shadow: 0 0 4px rgb(245 158 11 / 0.9);
+}
+
+.pfp-frame-candy {
+  background: repeating-linear-gradient(135deg, #ff9ec7 0 8px, #ffffff 8px 16px);
+  box-shadow: 0 0 10px -3px rgb(255 158 199 / 0.8);
+}
+
+.pfp-frame-mint {
+  background: linear-gradient(140deg, #d7fff2, #6ee7c8 55%, #34d399);
+  box-shadow: 0 0 12px -4px rgb(52 211 153 / 0.75);
+}
+
+.pfp-frame-lavender {
+  background: linear-gradient(140deg, #efe4ff, #c4b5fd 55%, #a78bfa);
+  box-shadow: 0 0 12px -4px rgb(167 139 250 / 0.8);
+}
+
+.pfp-frame-ocean {
+  background: linear-gradient(140deg, #c7f0ff, #38bdf8 50%, #0369a1);
+  box-shadow: 0 0 12px -4px rgb(3 105 161 / 0.7);
+}
+
+.pfp-frame-sunset {
+  background: linear-gradient(150deg, #ffd6a5, #ff8a5c 45%, #e0367c 80%, #7c3aed);
+  box-shadow: 0 0 14px -4px rgb(224 54 124 / 0.7);
+}
+
+.pfp-frame-ice {
+  background: linear-gradient(140deg, #f0fbff, #a5e8ff 45%, #4cc3f7);
+  box-shadow: 0 0 12px -5px rgb(76 195 247 / 0.85);
+}
+
+.pfp-frame-galaxy {
+  background:
+    radial-gradient(circle at 30% 25%, #ffffff 0 2%, transparent 3%),
+    radial-gradient(circle at 72% 68%, #e9d5ff 0 2%, transparent 3%),
+    linear-gradient(140deg, #312e81, #7c3aed 50%, #db2777);
+  box-shadow: 0 0 16px -4px rgb(124 58 237 / 0.8);
+}
+
+.pfp-frame-lime {
+  background: linear-gradient(140deg, #f2ffd6, #bef264 55%, #65a30d);
+  box-shadow: 0 0 12px -4px rgb(101 163 13 / 0.6);
+}
+
+.pfp-frame-shadow {
+  background: linear-gradient(150deg, #4b5563, #111827 55%, #374151);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 2px 10px -2px rgb(0 0 0 / 0.55);
 }
 
 /* Mascote */

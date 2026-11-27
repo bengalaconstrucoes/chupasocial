@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Ban, UserX } from "lucide-react";
+import { Ban, FileText, MessageCircle, Repeat2, UserX } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { FeedList } from "@/components/feed-list";
 import { ProfileHeader, ProfileLocked } from "@/components/profile-header";
@@ -156,25 +156,33 @@ export default async function ProfilePage({
           )
         ) : (
           <>
-          <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-4 py-2 sm:px-5">
+          {/* Abas estilo Twitter: ícone sempre, nome só na aba ativa. */}
+          <div className="sticky top-[57px] z-20 flex items-center gap-1 overflow-x-auto border-b border-line bg-surface/80 px-2 py-1.5 backdrop-blur-md sm:px-4 lg:top-0">
             {[
-              { key: "posts" as const, label: "Publicações", href: `/u/${profile.username}` },
-              { key: "reposts" as const, label: "Reposts", href: `/u/${profile.username}?tab=reposts` },
-              { key: "replies" as const, label: "Respostas", href: `/u/${profile.username}?tab=respostas` },
-            ].map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                aria-current={tab === item.key ? "page" : undefined}
-                className={
-                  tab === item.key
-                    ? "shrink-0 rounded-full bg-accent-soft px-3.5 py-1.5 text-sm font-medium text-accent"
-                    : "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink"
-                }
-              >
-                {item.label}
-              </Link>
-            ))}
+              { key: "posts" as const, label: "Posts", icon: FileText, href: `/u/${profile.username}` },
+              { key: "replies" as const, label: "Respostas", icon: MessageCircle, href: `/u/${profile.username}?tab=respostas` },
+              { key: "reposts" as const, label: "Reposts", icon: Repeat2, href: `/u/${profile.username}?tab=reposts` },
+            ].map((item) => {
+              const Icon = item.icon;
+              const active = tab === item.key;
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={item.label}
+                  title={item.label}
+                  className={
+                    active
+                      ? "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent-soft px-3.5 py-2 text-sm font-semibold text-accent"
+                      : "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                  }
+                >
+                  <Icon size={17} />
+                  {active && <span>{item.label}</span>}
+                </Link>
+              );
+            })}
           </div>
 
           {(isOwner || album.length > 0) && tab === "posts" && (

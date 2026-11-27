@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   Compass,
-  Flame,
   Hash,
   Sparkles,
   Trophy,
@@ -14,14 +13,13 @@ import { Ducky } from "@/components/ducky";
 import { FollowButton } from "@/components/follow-button";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTrendingTags } from "@/lib/hashtags";
-import { fetchTrendingTopics } from "@/lib/topics";
 import { fetchFriendsActivity } from "@/lib/queries";
 import type { Profile } from "@/lib/types";
 
 export async function RightRail({ viewerId }: { viewerId: string }) {
   const supabase = await createClient();
 
-  const [{ data: followRows }, { data: communityRows }, trending, topics, activity] =
+  const [{ data: followRows }, { data: communityRows }, trending, activity] =
     await Promise.all([
       supabase.from("follows").select("following_id").eq("follower_id", viewerId),
       supabase
@@ -30,7 +28,6 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
         .order("created_at", { ascending: false })
         .limit(4),
       fetchTrendingTags(6),
-      fetchTrendingTopics(6),
       fetchFriendsActivity(viewerId),
     ]);
 
@@ -55,39 +52,10 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
         <Ducky compact />
       </section>
 
-      {topics.length > 0 && (
-        <section className="chupa-card p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
-              <Flame size={14} className="text-accent" /> Assuntos do momento
-            </h2>
-            <span className="text-[0.68rem] text-muted">3 dias</span>
-          </div>
-          <ol className="mt-3 space-y-1">
-            {topics.map((topic, index) => (
-              <li key={topic.topic}>
-                <Link
-                  href={`/search?q=${encodeURIComponent(topic.topic)}&tab=publicacoes`}
-                  className="-mx-1.5 flex items-baseline gap-2 rounded-lg px-1.5 py-1.5 hover:bg-surface-2"
-                >
-                  <span className="w-3 text-[0.7rem] tabular-nums text-muted">{index + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {topic.label}
-                  </span>
-                  <span className="text-[0.68rem] tabular-nums text-muted">
-                    {topic.count} {topic.count === 1 ? "post" : "posts"}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
       <section className="chupa-card p-4">
         <div className="flex items-center justify-between">
           <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
-            <TrendingUp size={14} className="text-accent" /> Em alta
+            <TrendingUp size={14} className="text-accent" /> # em alta
           </h2>
           <span className="text-[0.68rem] text-muted">7 dias</span>
         </div>

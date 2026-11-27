@@ -107,6 +107,7 @@ export function ProfileHeader({
             src={profile.banner_url}
             alt={`Banner de ${profile.display_name}`}
             className="h-full w-full object-cover"
+            style={{ objectPosition: `50% ${profile.banner_focus ?? 50}%` }}
           />
         ) : (
           <div
@@ -227,16 +228,18 @@ export function ProfileHeader({
                       <strong>{formatCount(stats.followers)}</strong>
                       <span>seguidores</span>
                     </Link>
-                    <div className="chupa-y2k-stat">
-                      <strong>{profile.show_stats || isOwner ? formatCount(stats.posts) : "—"}</strong>
-                      <span>posts</span>
-                    </div>
-                    <div className="chupa-y2k-stat">
-                      <strong>
-                        {profile.show_visits || isOwner ? formatCount(visits) : "—"}
-                      </strong>
-                      <span>visitas</span>
-                    </div>
+                    {profile.show_stats && (
+                      <div className="chupa-y2k-stat">
+                        <strong>{formatCount(stats.posts)}</strong>
+                        <span>posts</span>
+                      </div>
+                    )}
+                    {profile.show_visits && (
+                      <div className="chupa-y2k-stat">
+                        <strong>{formatCount(visits)}</strong>
+                        <span>visitas</span>
+                      </div>
+                    )}
                   </div>
 
                   {profile.song_url ? (
@@ -244,6 +247,8 @@ export function ProfileHeader({
                       url={profile.song_url}
                       title={profile.favorite_song}
                       artist={profile.favorite_song_artist}
+                      textColor={profile.song_text_color}
+                      bubbleColor={profile.song_bubble_color}
                     />
                   ) : profile.favorite_song || profile.favorite_song_artist ? (
                     <div className="mt-2 flex justify-center">
@@ -287,7 +292,12 @@ export function ProfileHeader({
                         : "Essa pessoa ainda não escreveu nada sobre si."}
                     </p>
                   )}
-                  {achievements && <ProfileBadges counts={achievements} />}
+                  {achievements && (
+                    <ProfileBadges
+                      counts={achievements}
+                      hidden={profile.hidden_badges ?? []}
+                    />
+                  )}
                 </div>
               </section>
 
@@ -351,9 +361,11 @@ export function ProfileHeader({
                     <Heart size={12} className="text-accent" />{" "}
                     {formatCount(achievements?.likes ?? 0)} curtidas recebidas
                   </p>
-                  <p className="flex items-center gap-1.5 text-muted">
-                    <Eye size={12} className="text-accent" /> {formatCount(visits)} visitas
-                  </p>
+                  {profile.show_visits && (
+                    <p className="flex items-center gap-1.5 text-muted">
+                      <Eye size={12} className="text-accent" /> {formatCount(visits)} visitas
+                    </p>
+                  )}
                   {profile.website && (
                     <a
                       href={profile.website}
@@ -372,8 +384,8 @@ export function ProfileHeader({
 
           <div className="chupa-y2k-footer">
             <span>
-              layout por @{profile.username} ✦ perfil do ChupaSocial ✦ {formatCount(visits)}{" "}
-              visitas
+              layout por @{profile.username} ✦ perfil do ChupaSocial
+              {profile.show_visits ? ` ✦ ${formatCount(visits)} visitas` : ""}
             </span>
             <span className="ml-auto hidden sm:inline">♥ obrigado pela visita ♥</span>
           </div>
@@ -436,7 +448,9 @@ export function ProfileHeader({
               </p>
             )}
 
-            {achievements && <ProfileBadges counts={achievements} />}
+            {achievements && (
+              <ProfileBadges counts={achievements} hidden={profile.hidden_badges ?? []} />
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
               <span className="inline-flex items-center gap-1">
@@ -465,6 +479,8 @@ export function ProfileHeader({
                 url={profile.song_url}
                 title={profile.favorite_song}
                 artist={profile.favorite_song_artist}
+                textColor={profile.song_text_color}
+                bubbleColor={profile.song_bubble_color}
               />
             ) : (
               (profile.favorite_song || profile.favorite_song_artist) && (
@@ -486,15 +502,11 @@ export function ProfileHeader({
                 <strong className="font-semibold">{formatCount(stats.followers)}</strong>{" "}
                 <span className="text-muted">seguidores</span>
               </Link>
-              {profile.show_stats ? (
+              {profile.show_stats && (
                 <span>
                   <strong className="font-semibold">{formatCount(stats.posts)}</strong>{" "}
                   <span className="text-muted">publicações</span>
                 </span>
-              ) : (
-                isOwner && (
-                  <span className="text-[0.72rem] text-muted">estatísticas ocultas</span>
-                )
               )}
               {achievements && (
                 <span
@@ -505,7 +517,7 @@ export function ProfileHeader({
                   <span className="text-muted">curtidas recebidas</span>
                 </span>
               )}
-              {(profile.show_visits || isOwner) && visits > 0 && (
+              {profile.show_visits && visits > 0 && (
                 <span
                   className="inline-flex items-center gap-1 text-muted"
                   title="Visitas ao perfil"

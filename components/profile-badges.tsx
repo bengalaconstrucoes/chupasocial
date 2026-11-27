@@ -1,8 +1,16 @@
 import { computeBadges } from "@/lib/badges";
 import type { AchievementCounts } from "@/lib/queries";
 
-export function ProfileBadges({ counts }: { counts: AchievementCounts }) {
-  const badges = computeBadges(counts);
+/** Emblemas conquistados, menos os que a pessoa escolheu esconder. */
+export function ProfileBadges({
+  counts,
+  hidden = [],
+}: {
+  counts: AchievementCounts;
+  hidden?: string[] | null;
+}) {
+  const hiddenSet = new Set(hidden ?? []);
+  const badges = computeBadges(counts).filter((badge) => !hiddenSet.has(badge.id));
   if (badges.length === 0) return null;
 
   return (

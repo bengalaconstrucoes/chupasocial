@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, MapPin, Music2, Sparkles, Trash2 } from "lucide-react";
 import { FLAG_GROUPS, flagsByGroup } from "@/lib/flags";
 import { AVATAR_FRAMES, normalizeAvatarFrame } from "@/lib/avatar-frames";
+import { computeBadges } from "@/lib/badges";
+import type { AchievementCounts } from "@/lib/queries";
 import { Avatar } from "@/components/avatar";
 import { FlagBadge } from "@/components/badges";
 import { AvatarCrop } from "@/components/settings/avatar-crop";
@@ -21,7 +23,13 @@ import {
 import { cn, fileExtension } from "@/lib/utils";
 import type { Profile } from "@/lib/types";
 
-export function ProfileForm({ profile }: { profile: Profile }) {
+export function ProfileForm({
+  profile,
+  achievements,
+}: {
+  profile: Profile;
+  achievements?: AchievementCounts;
+}) {
   const router = useRouter();
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
@@ -44,6 +52,10 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   );
   const [songUrl, setSongUrl] = useState(profile.song_url ?? "");
   const [avatarFrame, setAvatarFrame] = useState(normalizeAvatarFrame(profile.avatar_frame));
+  const [bannerFocus, setBannerFocus] = useState(profile.banner_focus ?? 50);
+  const [songTextColor, setSongTextColor] = useState(profile.song_text_color ?? "");
+  const [songBubbleColor, setSongBubbleColor] = useState(profile.song_bubble_color ?? "");
+  const [hiddenBadges, setHiddenBadges] = useState<string[]>(profile.hidden_badges ?? []);
   const [profileStyle, setProfileStyle] = useState<string>(profile.profile_style ?? "modern");
   const [showStats, setShowStats] = useState(profile.show_stats);
   const [showVisits, setShowVisits] = useState(profile.show_visits);
@@ -57,6 +69,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   const [pending, startTransition] = useTransition();
 
   const previewNameFont = NAME_FONTS.find((font) => font.id === nameFont)?.className ?? "";
+  const earnedBadges = achievements ? computeBadges(achievements) : [];
   const musicSource = parseMusicUrl(songUrl);
   const previewProfile = {
     ...profile,
@@ -171,6 +184,10 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     formData.set("favorite_song_artist", favoriteSongArtist);
     formData.set("song_url", songUrl);
     formData.set("avatar_frame", avatarFrame);
+    formData.set("banner_focus", String(bannerFocus));
+    formData.set("song_text_color", songTextColor);
+    formData.set("song_bubble_color", songBubbleColor);
+    formData.set("hidden_badges", JSON.stringify(hiddenBadges));
     formData.set("profile_style", profileStyle);
     if (showStats) formData.set("show_stats", "on");
     if (showVisits) formData.set("show_visits", "on");
@@ -210,7 +227,12 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         <div className="relative h-28 overflow-hidden rounded-xl border border-line bg-surface-2">
           {bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={bannerUrl} alt="Banner atual" className="h-full w-full object-cover" />
+            <img
+              src={bannerUrl}
+              alt="Banner atual"
+              className="h-full w-full object-cover"
+              style={{ objectPosition: `50% ${bannerFocus}%` }}
+            />
           ) : (
             <div className="flex h-full items-center justify-center text-xs text-muted">Sem banner</div>
           )}
@@ -238,6 +260,24 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         >
           <ImagePlus size={13} /> Alterar banner
         </button>
+        {bannerUrl && (
+          <div className="mt-2">
+            <label className="field-label" htmlFor="banner_focus">
+              Enquadramento do banner
+            </label>
+            <input
+              id="banner_focus"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={bannerFocus}
+              onChange={(event) => setBannerFocus(Number(event.target.value))}
+              className="w-full accent-[var(--accent)]"
+            />
+            <p className="text-[0.68rem] text-muted">Arraste para escolher o pedaço da imagem que aparece.</p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -297,8 +337,10 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
       <div>
         <span className="field-label">Moldura da foto</span>
-        <div className="flex flex-wrap gap-1.5">
-          {AVATAR_FRAMES.map((frame) => (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          {AVATAR_FRAMES.filter(
+            (frame) => frame.id !== "admin" || profile.is_admin,
+          ).map((frame) => (
             <button
               key={frame.id}
               type="button"
@@ -306,13 +348,25 @@ export function ProfileForm({ profile }: { profile: Profile }) {
               aria-pressed={avatarFrame === frame.id}
               title={frame.hint}
               className={cn(
-                "rounded-lg border px-2.5 py-1.5 text-xs",
+                "flex flex-col items-center gap-1.5 rounded-xl border px-1.5 py-2 transition-colors",
                 avatarFrame === frame.id
-                  ? "border-accent bg-accent-soft text-accent"
-                  : "border-line text-muted hover:text-ink",
+                  ? "border-accent bg-accent-soft"
+                  : "border-line hover:bg-surface-2",
               )}
             >
-              {frame.label}
+              <Avatar
+                profile={{ ...previewProfile, avatar_frame: frame.id }}
+                size={44}
+                link={false}
+              />
+              <span
+                className={cn(
+                  "truncate text-[0.62rem] leading-tight",
+                  avatarFrame === frame.id ? "text-accent" : "text-muted",
+                )}
+              >
+                {frame.label}
+              </span>
             </button>
           ))}
         </div>
@@ -514,8 +568,52 @@ export function ProfileForm({ profile }: { profile: Profile }) {
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-[0.68rem] text-muted">
-          No YouTube e no Deezer o player só carrega quando alguém toca no play do perfil.
+        <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-2">
+          <div>
+            <label className="field-label" htmlFor="song_text_color">
+              Cor da letra do player
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="song_text_color"
+                type="color"
+                value={songTextColor || "#17131a"}
+                onChange={(event) => setSongTextColor(event.target.value)}
+                className="h-8 w-12 cursor-pointer rounded-md border border-line bg-surface"
+              />
+              <button
+                type="button"
+                onClick={() => setSongTextColor("")}
+                className="text-[0.7rem] text-muted hover:text-ink"
+              >
+                usar padrão
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="song_bubble_color">
+              Cor do balãozinho
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="song_bubble_color"
+                type="color"
+                value={songBubbleColor || "#ffffff"}
+                onChange={(event) => setSongBubbleColor(event.target.value)}
+                className="h-8 w-12 cursor-pointer rounded-md border border-line bg-surface"
+              />
+              <button
+                type="button"
+                onClick={() => setSongBubbleColor("")}
+                className="text-[0.7rem] text-muted hover:text-ink"
+              >
+                usar padrão
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="mt-2 text-[0.68rem] text-muted">
+          O vídeo do YouTube nunca aparece: o perfil toca só o som, com play e pause limpos.
         </p>
       </div>
 
@@ -632,7 +730,53 @@ export function ProfileForm({ profile }: { profile: Profile }) {
             />
             Mostrar contador de visitas no perfil
           </label>
+          <p className="text-[0.68rem] text-muted">
+            Desativado, o número simplesmente não aparece: nada de “estatísticas ocultas”.
+          </p>
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-xl border border-line p-3">
+        <span className="field-label !mb-0">Emblemas no perfil</span>
+        {earnedBadges.length === 0 ? (
+          <p className="text-[0.7rem] text-muted">
+            Você ainda não conquistou emblemas. Eles aparecem aqui conforme você publica e ganha
+            seguidores.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {earnedBadges.map((badge) => {
+              const hidden = hiddenBadges.includes(badge.id);
+              return (
+                <button
+                  key={badge.id}
+                  type="button"
+                  aria-pressed={!hidden}
+                  title={badge.hint}
+                  onClick={() =>
+                    setHiddenBadges((current) =>
+                      current.includes(badge.id)
+                        ? current.filter((id) => id !== badge.id)
+                        : [...current, badge.id],
+                    )
+                  }
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                    hidden
+                      ? "border-line text-muted line-through opacity-60"
+                      : "border-accent bg-accent-soft text-accent",
+                  )}
+                >
+                  <span aria-hidden>{badge.emoji}</span>
+                  {badge.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-[0.68rem] text-muted">
+          Toque para esconder ou mostrar. O emblema continua seu — só não aparece no perfil.
+        </p>
       </div>
 
       <div>

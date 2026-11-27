@@ -8,6 +8,23 @@ export type Patch = {
 /** Registro de atualizações do site, exibido em /patches. */
 export const PATCHES: Patch[] = [
   {
+    version: "0.6.0",
+    date: "2026-11-27",
+    title: "Abas do perfil, comunidades privadas e molduras fofas",
+    highlights: [
+      "Abas do perfil agora são Posts, Respostas e Reposts, com ícone e o nome aparecendo na aba ativa.",
+      "Respostas mostram a publicação respondida em cima, como no Twitter.",
+      "Comunidades podem ser privadas: as publicações ficam só para quem foi aceito.",
+      "Banner com enquadramento ajustável no perfil e nas comunidades.",
+      "Escolha quais emblemas aparecem no perfil — e desative estatísticas de verdade, sem o aviso de “ocultas”.",
+      "Molduras novas estilo Discord: orelhas de gatinho, rosas, sakura e um monte de cores.",
+      "Player de música enxuto: só o som e play/pause, sem vídeo, com cor da letra e do balãozinho.",
+      "O chat em tempo real agora também vive na aba Patches, junto dos avisos.",
+      "Assuntos do momento saíram: ficou só o # em alta.",
+      "Interface mais leve, com vidro suave e transições mais rápidas.",
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-11-27",
     title: "Chat de 24h, patches e música por link",

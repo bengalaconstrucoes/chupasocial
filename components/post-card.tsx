@@ -11,6 +11,39 @@ import { nameFontClass } from "@/lib/profile-style";
 import { cn, timeAgo } from "@/lib/utils";
 import type { FeedPost } from "@/lib/types";
 
+function ParentPost({ parent }: { parent: FeedPost }) {
+  const author = parent.author;
+  if (!author) return null;
+
+  return (
+    <Link
+      href={`/post/${parent.id}`}
+      className="mt-2 block rounded-xl border border-line/70 bg-surface-2/40 px-3 py-2 transition-colors hover:border-accent/50"
+    >
+      <span className="flex items-center gap-1.5 text-[0.7rem] text-muted">
+        <Avatar profile={author} size={16} link={false} />
+        <span className={cn("font-medium text-ink", nameFontClass(author.name_font))}>
+          {author.display_name}
+        </span>
+        {author.is_verified && <VerifiedBadge size={11} />}
+        <span>@{author.username}</span>
+        <span aria-hidden>·</span>
+        <span>{timeAgo(parent.created_at)}</span>
+      </span>
+      {parent.content && (
+        <p className="mt-1 line-clamp-2 text-[0.85rem] leading-relaxed text-muted">
+          <RichText text={parent.content} />
+        </p>
+      )}
+      {parent.media.length > 0 && (
+        <span className="mt-1 inline-flex items-center gap-1 text-[0.68rem] text-muted">
+          🖼️ {parent.media.length} {parent.media.length === 1 ? "mídia" : "mídias"}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function PostBody({
   post,
   viewerId,
@@ -84,6 +117,9 @@ function PostBody({
           )}
         </div>
       </header>
+
+      {/* Resposta: o post respondido aparece em cima, como no Twitter. */}
+      {!detail && !embedded && post.parent_post && <ParentPost parent={post.parent_post} />}
 
       {post.content && (
         <p className="prose-chupa mt-2 text-[0.98rem] leading-relaxed">

@@ -108,6 +108,39 @@ async function attachRepostedPosts(
   });
 }
 
+/**
+ * Respostas mostram o post respondido em cima (estilo Twitter).
+ * Buscamos os pais numa segunda consulta pelo mesmo motivo dos reposts.
+ */
+async function attachParentPosts(
+  posts: FeedPost[],
+  liked: Set<string>,
+  reposted: Set<string>,
+  saved: Set<string> = new Set(),
+): Promise<FeedPost[]> {
+  const parentIds = [
+    ...new Set(
+      posts.map((post) => post.parent_post_id ?? post.root_post_id).filter(Boolean) as string[],
+    ),
+  ];
+  if (parentIds.length === 0) return posts;
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("posts").select(POST_SELECT).in("id", parentIds);
+  const parents = new Map<string, FeedPost>(
+    ((data ?? []) as RawPost[]).map((row) => [
+      row.id,
+      normalizePost(row, liked, reposted, saved),
+    ]),
+  );
+
+  return posts.map((post) => {
+    const key = post.parent_post_id ?? post.root_post_id;
+    if (!key) return post;
+    return { ...post, parent_post: parents.get(key) ?? null };
+  });
+}
+
 export async function getMyLikes(postIds: string[]) {
   const empty = {
     liked: new Set<string>(),
@@ -193,6 +226,21 @@ export async function fetchFeed(options: {
     query = query.in("author_id", authorIds);
   }
   if (options.mode === "community" && options.communityId) {
+    // Comunidade privada: só quem foi aceito vê as publicações.
+    const { data: community } = await supabase
+      .from("communities")
+      .select("is_private")
+      .eq("id", options.communityId)
+      .maybeSingle();
+    if (community?.is_private) {
+      const { data: membership } = await supabase
+        .from("community_members")
+        .select("status")
+        .eq("community_id", options.communityId)
+        .eq("user_id", options.viewerId ?? "")
+        .maybeSingle();
+      if (!membership || membership.status !== "active") return [];
+    }
     query = query.eq("community_id", options.communityId);
   }
   if (options.mode === "hashtag" && options.tag) {
@@ -207,9 +255,14 @@ export async function fetchFeed(options: {
   const ids = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
   const { liked, reposted, saved, userId } = await getMyLikes(ids);
 
-  const normalized = await attachPollVotes(
-    await attachRepostedPosts(rows, liked, reposted, saved, userId),
-    userId,
+  const normalized = await attachParentPosts(
+    await attachPollVotes(
+      await attachRepostedPosts(rows, liked, reposted, saved, userId),
+      userId,
+    ),
+    liked,
+    reposted,
+    saved,
   );
 
   if (!options.personalize || !options.viewerId) return normalized;

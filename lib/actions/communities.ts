@@ -16,6 +16,8 @@ export async function createCommunityAction(formData: FormData): Promise<ActionR
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const imageUrl = String(formData.get("image_url") ?? "").trim() || null;
+  const bannerUrl = String(formData.get("banner_url") ?? "").trim() || null;
+  const bannerFocus = clampFocus(formData.get("banner_focus"));
   let slug = slugify(String(formData.get("slug") ?? "") || name);
 
   if (name.length < 3) return { ok: false, error: "O nome precisa ter ao menos 3 caracteres." };
@@ -35,7 +37,15 @@ export async function createCommunityAction(formData: FormData): Promise<ActionR
 
   const { data, error } = await supabase
     .from("communities")
-    .insert({ name, description, image_url: imageUrl, slug, creator_id: user.id })
+    .insert({
+      name,
+      description,
+      image_url: imageUrl,
+      banner_url: bannerUrl,
+      banner_focus: bannerFocus,
+      slug,
+      creator_id: user.id,
+    })
     .select("slug")
     .single();
 
@@ -173,6 +183,8 @@ export async function updateCommunityAction(formData: FormData): Promise<ActionR
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const imageUrl = String(formData.get("image_url") ?? "").trim() || null;
+  const bannerUrl = String(formData.get("banner_url") ?? "").trim() || null;
+  const bannerFocus = clampFocus(formData.get("banner_focus"));
 
   if (!communityId) return { ok: false, error: "Comunidade inválida." };
   if (name.length < 3 || name.length > 60) return { ok: false, error: "Nome inválido." };
@@ -186,7 +198,13 @@ export async function updateCommunityAction(formData: FormData): Promise<ActionR
 
   const { error } = await supabase
     .from("communities")
-    .update({ name, description, image_url: imageUrl })
+    .update({
+      name,
+      description,
+      image_url: imageUrl,
+      banner_url: bannerUrl,
+      banner_focus: bannerFocus,
+    })
     .eq("id", communityId);
 
   if (error) return { ok: false, error: "Não foi possível salvar as alterações." };
@@ -266,10 +284,17 @@ export async function declineMemberAction(
   return { ok: true, message: "Pedido recusado." };
 }
 
+function clampFocus(value: FormDataEntryValue | null): number {
+  const parsed = Number(value ?? 50);
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.min(100, Math.max(0, Math.round(parsed)));
+}
+
 export async function updateCommunityExtrasAction(
   communityId: string,
   requiresApproval: boolean,
   emojis: string[],
+  isPrivate = false,
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -290,7 +315,7 @@ export async function updateCommunityExtrasAction(
 
   const { error } = await supabase
     .from("communities")
-    .update({ requires_approval: requiresApproval, emojis: clean })
+    .update({ requires_approval: requiresApproval, emojis: clean, is_private: isPrivate })
     .eq("id", communityId);
 
   if (error) return { ok: false, error: "Não foi possível salvar as preferências." };

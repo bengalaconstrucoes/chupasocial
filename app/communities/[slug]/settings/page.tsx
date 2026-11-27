@@ -77,6 +77,7 @@ export default async function CommunitySettingsPage({
             <CommunityExtras
               communityId={community.id}
               requiresApproval={Boolean(community.requires_approval)}
+              isPrivate={Boolean(community.is_private)}
               emojis={community.emojis ?? []}
               inviteToken={community.invite_token ?? ""}
               pendingMembers={((pendingRows ?? []) as any[])

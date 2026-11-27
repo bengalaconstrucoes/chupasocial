@@ -111,8 +111,25 @@ export async function createPostAction(formData: FormData): Promise<ActionResult
       .select("user_id")
       .eq("community_id", communityId)
       .eq("user_id", user.id)
+      .eq("status", "active")
       .maybeSingle();
     if (!membership) return fail("Entre na comunidade para publicar nela.");
+
+    const { data: community } = await supabase
+      .from("communities")
+      .select("is_private")
+      .eq("id", communityId)
+      .maybeSingle();
+    if (community?.is_private) {
+      const { data: activeMembership } = await supabase
+        .from("community_members")
+        .select("user_id")
+        .eq("community_id", communityId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!activeMembership) return fail("Esta comunidade é privada.");
+    }
   }
 
   const { data: post, error } = await supabase
