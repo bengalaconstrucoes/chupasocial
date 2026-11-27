@@ -1,5 +1,5 @@
 import { Music2 } from "lucide-react";
-import { flagBackground, findFlag } from "@/lib/flags";
+import { findFlag, flagImage } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 export function VerifiedBadge({
@@ -79,38 +79,31 @@ export function FlagBadge({
   const flag = findFlag(flagId);
   if (!flag) return null;
 
-  const inner = Math.max(9, size * 0.62);
+  const width = Math.max(24, Math.round(size * 1.5));
+  const label = flag.era ? `${flag.label} (${flag.era})` : flag.label;
 
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle shadow-sm ring-1 ring-black/15",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[3px] bg-surface-2 align-middle shadow-[0_1px_3px_rgb(0_0_0_/_0.22)] ring-1 ring-black/15",
         className,
       )}
-      style={{
-        width: size * 1.45,
-        height: size,
-        background: flagBackground(flag),
-      }}
-      title={`Bandeira: ${flag.label}`}
-      aria-label={`Bandeira: ${flag.label}`}
+      style={{ width, height: size }}
+      title={`Bandeira: ${label}`}
+      aria-label={`Bandeira: ${label}`}
       role="img"
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(160deg, rgb(255 255 255 / 0.35) 0%, transparent 45%, rgb(0 0 0 / 0.18) 100%)",
-        }}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={flagImage(flag.file, 120)}
+        alt=""
+        width={width}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        className="h-full w-full object-cover"
       />
-      <span
-        className="relative flex items-center justify-center rounded-full bg-white/95 font-bold leading-none text-[#17131a] shadow-[0_1px_2px_rgb(0_0_0_/_0.35)]"
-        style={{ width: inner, height: inner, fontSize: Math.max(5, size * 0.3) }}
-        aria-hidden
-      >
-        {flag.code}
-      </span>
     </span>
   );
 }

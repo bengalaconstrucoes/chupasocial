@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, MapPin, Music2, Sparkles, Trash2 } from "lucide-react";
-import { FLAGS } from "@/lib/flags";
+import { FLAG_GROUPS, flagsByGroup } from "@/lib/flags";
 import { AVATAR_FRAMES, normalizeAvatarFrame } from "@/lib/avatar-frames";
 import { Avatar } from "@/components/avatar";
 import { FlagBadge } from "@/components/badges";
@@ -411,20 +411,16 @@ export function ProfileForm({ profile }: { profile: Profile }) {
           className="field"
         >
           <option value="">Sem bandeira</option>
-          <optgroup label="Estados brasileiros">
-            {FLAGS.filter((item) => item.group === "estados").map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label} ({item.code})
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Bandeiras históricas">
-            {FLAGS.filter((item) => item.group === "historicas").map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </optgroup>
+          {FLAG_GROUPS.map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {flagsByGroup(group.id).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                  {item.era ? ` · ${item.era}` : item.group === "estados" ? ` (${item.code})` : ""}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         </select>
       </div>
 
