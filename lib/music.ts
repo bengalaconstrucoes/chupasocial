@@ -81,6 +81,7 @@ export function parseMusicUrl(raw: string | null | undefined): MusicSource | nul
       label: "Spotify",
       url: value,
       embedUrl: `https://open.spotify.com/embed/${match[1]}/${match[2]}?utm_source=generator&theme=0`,
+      autoplayUrl: `https://open.spotify.com/embed/${match[1]}/${match[2]}?utm_source=generator&autoplay=1`,
     };
   }
 
@@ -90,6 +91,7 @@ export function parseMusicUrl(raw: string | null | undefined): MusicSource | nul
       label: "SoundCloud",
       url: value,
       embedUrl: `https://w.soundcloud.com/player/?url=${encodeURIComponent(url.toString())}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`,
+      autoplayUrl: `https://w.soundcloud.com/player/?url=${encodeURIComponent(url.toString())}&color=%23ff5500&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`,
     };
   }
 

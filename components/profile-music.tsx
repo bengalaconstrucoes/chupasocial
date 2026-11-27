@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Music2, Pause, Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { parseMusicUrl } from "@/lib/music";
 import { cn } from "@/lib/utils";
 
@@ -9,8 +9,9 @@ const IFRAME_ALLOW =
   "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
 
 /**
- * Som do perfil, sem vídeo e sem moldura chamativa: só o botão de play/pause,
- * o nome da música e (quando a pessoa escolher) as cores do texto e do balão.
+ * Som do perfil: só o botão de play/pause com o nome da música e do artista.
+ * O player oficial (YouTube, Spotify, SoundCloud, Deezer, Apple) fica escondido
+ * fora da tela e só existe enquanto está tocando — pausar desmonta e para o som.
  */
 export function ProfileMusic({
   url,
@@ -79,7 +80,7 @@ export function ProfileMusic({
       return;
     }
 
-    // Links de plataforma: montar o embed toca; desmontar pausa.
+    // Plataformas: montar o player escondido toca; pausar desmonta e silencia.
     setMounted((current) => {
       const next = !current;
       setPlaying(next);
@@ -89,9 +90,7 @@ export function ProfileMusic({
 
   const style = {
     ...(textColor ? { color: textColor } : {}),
-    ...(bubbleColor
-      ? { background: bubbleColor, borderColor: bubbleColor }
-      : {}),
+    ...(bubbleColor ? { background: bubbleColor, borderColor: bubbleColor } : {}),
   } as React.CSSProperties;
 
   return (
@@ -119,20 +118,9 @@ export function ProfileMusic({
             {meta?.title || title || `${source.label} · som do perfil`}
           </p>
           <p className="truncate text-[0.66rem] opacity-70">
-            {meta?.artist || artist || `${source.label} · ${playing ? "tocando" : "toque para ouvir"}`}
+            {meta?.artist || artist || (playing ? "tocando" : "toque para ouvir")}
           </p>
         </div>
-
-        <a
-          href={source.url}
-          target="_blank"
-          rel="noreferrer noopener nofollow"
-          className="shrink-0 rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
-          aria-label={`Abrir no ${source.label}`}
-          title={`Abrir no ${source.label}`}
-        >
-          <ExternalLink size={12} />
-        </a>
       </div>
 
       {isAudio && (
@@ -147,32 +135,21 @@ export function ProfileMusic({
         />
       )}
 
-      {/* YouTube: só o áudio, o quadro fica fora da tela. */}
-      {source.kind === "youtube" && mounted && (
-        <iframe
-          src={source.autoplayUrl ?? source.embedUrl}
-          title="Som do perfil no YouTube"
-          className="pointer-events-none absolute h-px w-px opacity-0"
-          allow={IFRAME_ALLOW}
-        />
-      )}
-
-      {/* Spotify, SoundCloud, Deezer e Apple: player compacto, só depois do play. */}
-      {!isAudio && source.kind !== "youtube" && mounted && (
-        <iframe
-          src={`${source.embedUrl}${source.embedUrl.includes("?") ? "&" : "?"}autoplay=1`}
-          title={`Player do ${source.label}`}
-          className="mt-2 w-full rounded-xl border border-line"
-          height={source.kind === "spotify" ? 80 : source.kind === "soundcloud" ? 110 : 92}
-          loading="lazy"
-          allow={IFRAME_ALLOW}
-        />
-      )}
-
-      {!isAudio && !mounted && (
-        <p className="mt-1.5 inline-flex items-center gap-1 text-[0.66rem] opacity-60">
-          <Music2 size={10} /> toca só o som no {source.label}
-        </p>
+      {/* Player oficial escondido: só existe enquanto toca, sem vídeo na tela. */}
+      {!isAudio && mounted && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed left-[-9999px] top-0 h-px w-px overflow-hidden opacity-0"
+        >
+          <iframe
+            src={source.autoplayUrl ?? source.embedUrl}
+            title={`Som do perfil no ${source.label}`}
+            width={1}
+            height={1}
+            allow={IFRAME_ALLOW}
+            tabIndex={-1}
+          />
+        </div>
       )}
     </div>
   );
