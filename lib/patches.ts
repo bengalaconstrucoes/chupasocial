@@ -19,7 +19,7 @@ export const PATCHES: Patch[] = [
       "Escolha quais emblemas aparecem no perfil — e desative estatísticas de verdade, sem o aviso de “ocultas”.",
       "Molduras novas estilo Discord: orelhas de gatinho, rosas, sakura e um monte de cores.",
       "Player de música enxuto: só o som e play/pause, sem vídeo, com cor da letra e do balãozinho.",
-      "O chat em tempo real agora também vive na aba Patches, junto dos avisos.",
+      "Patches segue só com avisos e atualizações; o chat em tempo real tem aba própria.",
       "Assuntos do momento saíram: ficou só o # em alta.",
       "Interface mais leve, com vidro suave e transições mais rápidas.",
     ],

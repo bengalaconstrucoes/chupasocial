@@ -1,14 +1,12 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Megaphone, MessagesSquare, Pin, Sparkles } from "lucide-react";
+import { Megaphone, Pin, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/avatar";
 import { AdminBadge } from "@/components/badges";
 import { AnnouncementForm } from "@/components/announcement-form";
 import { AnnouncementRoom } from "@/components/announcement-room";
 import { Ducky } from "@/components/ducky";
-import { ChatRoom } from "@/components/chat-room";
-import type { ChatMessage } from "@/lib/actions/chat";
 import { PATCHES } from "@/lib/patches";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, timeAgo } from "@/lib/utils";
@@ -30,25 +28,14 @@ export default async function PatchesPage() {
     .maybeSingle();
   if (!profileData) redirect("/login?erro=sessao");
 
-  await supabase.rpc("prune_chat_messages");
-
-  const [{ data: announcementRows }, { data: chatRows }] = await Promise.all([
-    supabase
+  const { data: announcementRows } = await supabase
     .from("announcements")
     .select(
       "id, title, body, pinned, created_at, author:profiles!announcements_author_id_fkey(username, display_name, avatar_url, avatar_frame, is_admin)",
     )
-      .order("pinned", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(20),
-    supabase
-      .from("chat_messages")
-      .select(
-        "id, author_id, body, created_at, author:profiles!chat_messages_author_id_fkey(username, display_name, avatar_url, avatar_frame)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(200),
-  ]);
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(20);
 
   const announcements = (announcementRows ?? []) as any[];
   const ids = announcements.map((item) => item.id as string);
@@ -85,26 +72,8 @@ export default async function PatchesPage() {
 
       <div className="space-y-6 px-4 py-4 sm:px-5">
         <div>
-          <Ducky tip="Avisos, histórico de versões e o chat das últimas 24 h ficam todos aqui." />
+          <Ducky tip="Os avisos oficiais e o histórico de versões ficam aqui. O chat é na aba Chat." />
         </div>
-
-        <section>
-          <h2 className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold">
-            <MessagesSquare size={14} className="text-accent" /> Chat das últimas 24 h
-          </h2>
-          <div className="chupa-card overflow-hidden">
-            <ChatRoom
-              initialMessages={[...((chatRows ?? []) as unknown as ChatMessage[])].reverse()}
-              viewer={{
-                id: profileData.id,
-                username: profileData.username,
-                display_name: profileData.display_name,
-                avatar_url: profileData.avatar_url,
-                avatar_frame: profileData.avatar_frame,
-              }}
-            />
-          </div>
-        </section>
 
         <section>
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold">
