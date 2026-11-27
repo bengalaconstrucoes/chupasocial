@@ -82,6 +82,7 @@ export default async function SearchPage({
         .from("posts")
         .select(POST_SELECT)
         .ilike("content", term)
+        .is("hidden_at", null)
         .is("root_post_id", null)
         .order("created_at", { ascending: false })
         .limit(popular || onlyMedia ? 60 : 25);

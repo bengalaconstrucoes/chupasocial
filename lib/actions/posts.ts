@@ -3,7 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractMentions } from "@/lib/hashtags";
+import { screenContent } from "@/lib/moderation";
 import type { ActionResult } from "@/lib/types";
+
+async function isMuted(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const { data } = await supabase
+    .from("profiles")
+    .select("muted_until")
+    .eq("id", userId)
+    .maybeSingle();
+  return Boolean(data?.muted_until && new Date(data.muted_until).getTime() > Date.now());
+}
 
 function fail(message: string): ActionResult {
   return { ok: false, error: message };
@@ -28,6 +41,9 @@ export async function createPostAction(formData: FormData): Promise<ActionResult
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return fail("Sua sessão expirou. Entre novamente.");
+  if (await isMuted(supabase, user.id)) {
+    return fail("Sua conta está silenciada pela moderação por enquanto.");
+  }
 
   const content = String(formData.get("content") ?? "").trim();
   const communityId = String(formData.get("community_id") ?? "") || null;
@@ -79,6 +95,9 @@ export async function createPostAction(formData: FormData): Promise<ActionResult
   ].slice(0, 3);
 
   if (content.length > 2000) return fail("O texto pode ter no máximo 2000 caracteres.");
+
+  const screening = screenContent(content);
+  if (screening.blocked) return fail(screening.reason ?? "Esse conteúdo não é permitido.");
   if (!content && media.length === 0 && poll.length === 0) {
     return fail("Escreva algo, adicione uma mídia ou crie uma enquete.");
   }
@@ -103,6 +122,19 @@ export async function createPostAction(formData: FormData): Promise<ActionResult
     .single();
 
   if (error || !post) return fail(translate(error ?? { message: "" }));
+
+  if (screening.flags.length > 0) {
+    await supabase
+      .from("moderation_flags")
+      .insert(
+        screening.flags.map((flag) => ({
+          post_id: post.id,
+          reason: flag.reason,
+          severity: flag.severity,
+        })),
+      )
+      .then(() => undefined, () => undefined);
+  }
 
   const mentions = extractMentions(content);
   if (mentions.length > 0) {
@@ -336,9 +368,15 @@ export async function addCommentAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return fail("Sua sessão expirou.");
+  if (await isMuted(supabase, user.id)) {
+    return fail("Sua conta está silenciada pela moderação por enquanto.");
+  }
 
   const trimmed = content.trim();
   if (!trimmed) return fail("Escreva uma resposta.");
+
+  const screening = screenContent(trimmed);
+  if (screening.blocked) return fail(screening.reason ?? "Esse conteúdo não é permitido.");
   if (trimmed.length > 1000) return fail("A resposta pode ter no máximo 1000 caracteres.");
 
   let rootId = postId;

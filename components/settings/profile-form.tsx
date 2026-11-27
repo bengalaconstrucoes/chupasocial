@@ -2,9 +2,11 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, MapPin, Sparkles } from "lucide-react";
+import { ImagePlus, Loader2, MapPin, Music2, Sparkles, Trash2 } from "lucide-react";
 import { FLAGS } from "@/lib/flags";
+import { AVATAR_FRAMES, normalizeAvatarFrame } from "@/lib/avatar-frames";
 import { Avatar } from "@/components/avatar";
+import { FlagBadge } from "@/components/badges";
 import { AvatarCrop } from "@/components/settings/avatar-crop";
 import { GifPicker } from "@/components/gif-picker";
 import { createClient } from "@/lib/supabase/client";
@@ -39,12 +41,14 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   const [favoriteSongArtist, setFavoriteSongArtist] = useState(
     profile.favorite_song_artist ?? "",
   );
+  const [songUrl, setSongUrl] = useState(profile.song_url ?? "");
+  const [avatarFrame, setAvatarFrame] = useState(normalizeAvatarFrame(profile.avatar_frame));
   const [profileStyle, setProfileStyle] = useState<string>(profile.profile_style ?? "modern");
   const [showStats, setShowStats] = useState(profile.show_stats);
   const [showVisits, setShowVisits] = useState(profile.show_visits);
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url);
   const [bannerUrl, setBannerUrl] = useState(profile.banner_url);
-  const [uploading, setUploading] = useState<"avatar" | "banner" | null>(null);
+  const [uploading, setUploading] = useState<"avatar" | "banner" | "song" | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +60,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     ...profile,
     display_name: displayName || profile.display_name,
     username,
+    avatar_frame: avatarFrame,
   };
 
   async function upload(kind: "banner", file: File) {
@@ -107,6 +112,35 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     return uploadAvatarBlob(blob, "image/jpeg", "jpg");
   }
 
+  async function uploadSong(file: File) {
+    if (!file.type.startsWith("audio/")) {
+      setError("Escolha um arquivo de áudio (MP3, M4A, OGG…).");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("A música pode ter até 15 MB.");
+      return;
+    }
+
+    setUploading("song");
+    setError(null);
+    const supabase = createClient();
+    const path = `${profile.id}/song-${Date.now()}.${fileExtension(file)}`;
+    const { error: uploadError } = await supabase.storage
+      .from("songs")
+      .upload(path, file, { contentType: file.type, cacheControl: "31536000", upsert: true });
+
+    if (uploadError) {
+      setError("Falha no upload da música. Confira o formato e o tamanho.");
+      setUploading(null);
+      return;
+    }
+
+    const { data } = supabase.storage.from("songs").getPublicUrl(path);
+    setSongUrl(data.publicUrl);
+    setUploading(null);
+  }
+
   function useGifAvatar(file: File) {
     if (file.size > 5 * 1024 * 1024) {
       setError("O GIF da foto pode ter até 5 MB.");
@@ -133,6 +167,8 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     formData.set("status_text", statusText);
     formData.set("favorite_song", favoriteSong);
     formData.set("favorite_song_artist", favoriteSongArtist);
+    formData.set("song_url", songUrl);
+    formData.set("avatar_frame", avatarFrame);
     formData.set("profile_style", profileStyle);
     if (showStats) formData.set("show_stats", "on");
     if (showVisits) formData.set("show_visits", "on");
@@ -257,6 +293,32 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         </div>
       </div>
 
+      <div>
+        <span className="field-label">Moldura da foto</span>
+        <div className="flex flex-wrap gap-1.5">
+          {AVATAR_FRAMES.map((frame) => (
+            <button
+              key={frame.id}
+              type="button"
+              onClick={() => setAvatarFrame(frame.id)}
+              aria-pressed={avatarFrame === frame.id}
+              title={frame.hint}
+              className={cn(
+                "rounded-lg border px-2.5 py-1.5 text-xs",
+                avatarFrame === frame.id
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-line text-muted hover:text-ink",
+              )}
+            >
+              {frame.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-[0.7rem] text-muted">
+          A moldura aparece na sua foto em todo o site.
+        </p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="field-label" htmlFor="display_name">
@@ -337,6 +399,11 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         <label className="field-label" htmlFor="flag">
           Bandeira do perfil
         </label>
+        {flag && (
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
+            <FlagBadge flagId={flag} size={15} /> prévia da bandeira escolhida
+          </p>
+        )}
         <select
           id="flag"
           value={flag}
@@ -388,6 +455,54 @@ export function ProfileForm({ profile }: { profile: Profile }) {
             placeholder="Quem canta"
           />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-line p-3">
+        <span className="field-label">Música que toca no seu perfil</span>
+        {songUrl ? (
+          <audio controls src={songUrl} className="mb-2 w-full" />
+        ) : (
+          <p className="mb-2 text-xs text-muted">
+            Envie um áudio de até 15 MB. Ele começa a tocar quando alguém abre seu perfil.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className={cn(
+              "btn btn-ghost !px-3 !py-1.5 text-xs",
+              uploading === "song" && "pointer-events-none opacity-60",
+            )}
+          >
+            {uploading === "song" ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Music2 size={13} />
+            )}
+            {uploading === "song" ? "Enviando" : songUrl ? "Trocar música" : "Enviar música"}
+            <input
+              type="file"
+              accept="audio/mpeg,audio/mp4,audio/ogg,audio/webm,audio/wav"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadSong(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          {songUrl && (
+            <button
+              type="button"
+              onClick={() => setSongUrl("")}
+              className="btn btn-quiet !px-2.5 !py-1.5 text-xs text-danger"
+            >
+              <Trash2 size={12} /> remover
+            </button>
+          )}
+        </div>
+        <p className="mt-1.5 text-[0.68rem] text-muted">
+          Se o navegador bloquear o autoplay, o botão de play fica no próprio perfil.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

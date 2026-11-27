@@ -10,6 +10,7 @@ export async function loadMorePostsAction(options: {
   profileId?: string;
   communityId?: string;
   tag?: string;
+  filter?: "all" | "posts" | "reposts" | "replies";
 }): Promise<FeedPost[]> {
   const supabase = await createClient();
   const {
@@ -23,6 +24,7 @@ export async function loadMorePostsAction(options: {
     profileId: options.profileId,
     communityId: options.communityId,
     tag: options.tag,
+    filter: options.filter,
     viewerId: user.id,
     limit: 12,
   });

@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Loader2, MailOpen, ShieldOff, X } from "lucide-react";
+import { BadgeCheck, EyeOff, Loader2, MailOpen, ShieldOff, VolumeX, X } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import {
   markFeedbackReadAction,
   resolveReportAction,
+  setPostHiddenAction,
+  setUserMutedAction,
   setUserVerifiedAction,
 } from "@/lib/actions/admin";
 import { formatDate } from "@/lib/utils";
@@ -30,7 +32,19 @@ export type AdminUser = {
   avatar_url: string | null;
   is_verified: boolean;
   is_admin: boolean;
+  muted_until?: string | null;
   created_at: string;
+};
+
+export type AdminFlag = {
+  id: string;
+  post_id: string;
+  reason: string;
+  severity: string;
+  created_at: string;
+  hidden: boolean;
+  content: string;
+  author: { username: string; display_name: string } | null;
 };
 
 export type AdminFeedback = {
@@ -56,15 +70,18 @@ export function AdminPanel({
   reports: initialReports,
   users: initialUsers,
   feedback: initialFeedback,
+  flags: initialFlags = [],
 }: {
   reports: AdminReport[];
   users: AdminUser[];
   feedback: AdminFeedback[];
+  flags?: AdminFlag[];
 }) {
   const router = useRouter();
   const [reports, setReports] = useState(initialReports);
   const [users, setUsers] = useState(initialUsers);
   const [feedback, setFeedback] = useState(initialFeedback);
+  const [flags, setFlags] = useState(initialFlags);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -95,6 +112,51 @@ export function AdminPanel({
       }
       setReports((current) =>
         current.map((item) => (item.id === report.id ? { ...item, status } : item)),
+      );
+      router.refresh();
+    });
+  }
+
+  function toggleHidden(flag: AdminFlag) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setPostHiddenAction(flag.post_id, !flag.hidden, flag.reason);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const hidden = !flag.hidden;
+      setFlags((current) =>
+        current.map((item) =>
+          item.post_id === flag.post_id ? { ...item, hidden } : item,
+        ),
+      );
+      router.refresh();
+    });
+  }
+
+  function toggleMute(user: AdminUser) {
+    setError(null);
+    const muted = Boolean(
+      user.muted_until && new Date(user.muted_until).getTime() > Date.now(),
+    );
+    startTransition(async () => {
+      const result = await setUserMutedAction(user.id, muted ? 0 : 1440);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                muted_until: muted
+                  ? null
+                  : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              }
+            : item,
+        ),
       );
       router.refresh();
     });
@@ -188,6 +250,63 @@ export function AdminPanel({
       </section>
 
       <section>
+        <h2 className="mb-3 text-sm font-semibold">
+          Fila de moderação ({flags.length})
+        </h2>
+        {flags.length === 0 ? (
+          <p className="chupa-card p-4 text-xs text-muted">
+            Nada sinalizado automaticamente. A moderação está em dia.
+          </p>
+        ) : (
+          <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+            {flags.map((flag) => (
+              <li key={flag.id} className="px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span
+                    className={
+                      flag.severity === "high"
+                        ? "chip !py-0.5 !border-danger/40 !text-danger"
+                        : "chip !py-0.5"
+                    }
+                  >
+                    {flag.reason}
+                  </span>
+                  {flag.author ? (
+                    <Link href={`/u/${flag.author.username}`} className="hover:underline">
+                      @{flag.author.username}
+                    </Link>
+                  ) : (
+                    <span>conta removida</span>
+                  )}
+                  {flag.hidden && <span className="text-danger">oculto</span>}
+                  <span className="ml-auto">{formatDate(flag.created_at)}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm">
+                  {flag.content || "(publicação sem texto)"}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Link
+                    href={`/post/${flag.post_id}`}
+                    className="text-[0.7rem] text-accent hover:underline"
+                  >
+                    ver publicação
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggleHidden(flag)}
+                    disabled={pending}
+                    className="btn btn-ghost ml-auto !px-2.5 !py-1 text-[0.7rem]"
+                  >
+                    <EyeOff size={12} /> {flag.hidden ? "restaurar" : "ocultar"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
         <h2 className="mb-3 text-sm font-semibold">Contas recentes</h2>
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {users.map((user) => (
@@ -211,6 +330,22 @@ export function AdminPanel({
               >
                 {user.is_verified ? <ShieldOff size={12} /> : <BadgeCheck size={12} />}
                 {user.is_verified ? "remover selo" : "verificar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMute(user)}
+                disabled={pending}
+                className={
+                  user.muted_until && new Date(user.muted_until).getTime() > Date.now()
+                    ? "btn btn-ghost !px-2.5 !py-1 text-[0.7rem] text-danger"
+                    : "btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
+                }
+                title="Silenciar por 24 h"
+              >
+                <VolumeX size={12} />{" "}
+                {user.muted_until && new Date(user.muted_until).getTime() > Date.now()
+                  ? "remover silêncio"
+                  : "silenciar 24h"}
               </button>
             </li>
           ))}

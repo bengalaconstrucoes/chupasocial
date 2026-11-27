@@ -61,6 +61,52 @@ export async function resolveReportAction(
   return { ok: true, message: status === "reviewed" ? "Denúncia revisada." : "Denúncia dispensada." };
 }
 
+export async function setPostHiddenAction(
+  postId: string,
+  hidden: boolean,
+  reason?: string,
+): Promise<ActionResult> {
+  const supabase = await requireAdmin();
+  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  if (!UUID.test(postId)) return { ok: false, error: "Publicação inválida." };
+
+  const { error } = await supabase
+    .from("posts")
+    .update({
+      hidden_at: hidden ? new Date().toISOString() : null,
+      hidden_reason: hidden ? (reason ?? "moderação").slice(0, 200) : null,
+    })
+    .eq("id", postId);
+
+  if (error) return { ok: false, error: "Não foi possível alterar a publicação." };
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { ok: true, message: hidden ? "Publicação ocultada." : "Publicação restaurada." };
+}
+
+export async function setUserMutedAction(
+  userId: string,
+  minutes: number,
+): Promise<ActionResult> {
+  const supabase = await requireAdmin();
+  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
+
+  const { error } = await supabase.rpc("set_user_muted", {
+    p_user: userId,
+    p_minutes: minutes,
+  });
+
+  if (error) return { ok: false, error: "Não foi possível alterar o silêncio da conta." };
+
+  revalidatePath("/admin");
+  return {
+    ok: true,
+    message: minutes > 0 ? `Conta silenciada por ${minutes} minutos.` : "Silêncio removido.",
+  };
+}
+
 export async function markFeedbackReadAction(feedbackId: string): Promise<ActionResult> {
   const supabase = await requireAdmin();
   if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };

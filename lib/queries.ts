@@ -10,8 +10,9 @@ import type {
 
 export const POST_SELECT = `
   id, author_id, community_id, repost_of, root_post_id, parent_post_id, content, created_at, edited_at,
-  author:profiles!posts_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, location, accent_color, name_font, is_verified, flag, status_text, status_emoji, favorite_song, favorite_song_artist, pinned_post_id, show_stats, show_visits, profile_style, last_seen_at, is_private, deactivated_at, created_at, updated_at),
+  author:profiles!posts_author_id_fkey(id, username, display_name, bio, avatar_url, banner_url, website, location, accent_color, name_font, is_verified, is_admin, avatar_frame, song_url, flag, status_text, status_emoji, favorite_song, favorite_song_artist, pinned_post_id, show_stats, show_visits, profile_style, last_seen_at, is_private, deactivated_at, created_at, updated_at),
   media:post_media(id, storage_path, public_url, position, media_type),
+  post_views(count),
   likes(count),
   replies:posts!root_post_id(count),
   reposts:posts!repost_of(count),
@@ -62,6 +63,7 @@ export function normalizePost(
     like_count: count(raw.likes),
     comment_count: count(raw.replies ?? raw.comments),
     repost_count: count(raw.reposts),
+    view_count: count(raw.post_views),
     liked_by_me: likedIds.has(raw.id),
     reposted_by_me: repostedIds.has(raw.id),
     saved_by_me: savedIds.has(raw.id),
@@ -150,7 +152,9 @@ export async function fetchFeed(options: {
   limit?: number;
   before?: string;
   personalize?: boolean;
+  filter?: "all" | "posts" | "reposts" | "replies";
 }): Promise<FeedPost[]> {
+  const filter = options.filter ?? "all";
   const supabase = await createClient();
   const limit = options.limit ?? 12;
   const fetchLimit = options.personalize && options.viewerId ? Math.min(60, limit * 4) : limit;
@@ -169,9 +173,18 @@ export async function fetchFeed(options: {
   let query = supabase
     .from("posts")
     .select(POST_SELECT)
-    .is("root_post_id", null)
+    .is("hidden_at", null)
     .order("created_at", { ascending: false })
     .limit(fetchLimit);
+
+  // Abas do perfil: publicações, reposts e respostas.
+  if (filter === "replies") {
+    query = query.not("root_post_id", "is", null);
+  } else {
+    query = query.is("root_post_id", null);
+    if (filter === "posts") query = query.is("repost_of", null);
+    if (filter === "reposts") query = query.not("repost_of", "is", null);
+  }
 
   if (blocked.length > 0) query = query.not("author_id", "in", `(${blocked.join(",")})`);
   if (options.mode === "profile" && options.profileId) query = query.eq("author_id", options.profileId);
@@ -204,8 +217,9 @@ export async function fetchFeed(options: {
 }
 
 /**
- * Ordena o feed "Para você" por engajamento, proximidade e recência.
- * O conteúdo continua sendo cronológico na origem; só a ordem muda.
+ * Ordena o feed "Para você". O conteúdo continua sendo o mesmo; só a ordem
+ * muda, com decaimento de tempo, engajamento relativo, afinidade (quem você
+ * segue, amizade mútua), comunidades em comum e diversidade de autores.
  */
 async function personalizePosts(
   posts: FeedPost[],
@@ -215,29 +229,84 @@ async function personalizePosts(
   if (posts.length <= 1) return posts;
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("follows")
-    .select("following_id")
-    .eq("follower_id", viewerId);
+  const [{ data: followingRows }, { data: followerRows }, { data: membershipRows }] =
+    await Promise.all([
+      supabase.from("follows").select("following_id").eq("follower_id", viewerId),
+      supabase.from("follows").select("follower_id").eq("following_id", viewerId),
+      supabase.from("community_members").select("community_id").eq("user_id", viewerId),
+    ]);
 
-  const close = new Set([viewerId, ...(data ?? []).map((row: any) => row.following_id as string)]);
+  const following = new Set((followingRows ?? []).map((row: any) => row.following_id as string));
+  const mutual = new Set(
+    (followerRows ?? [])
+      .map((row: any) => row.follower_id as string)
+      .filter((id) => following.has(id)),
+  );
+  const communities = new Set(
+    (membershipRows ?? []).map((row: any) => row.community_id as string),
+  );
   const now = Date.now();
 
   const scored = posts.map((post) => {
-    const hours = (now - new Date(post.created_at).getTime()) / 3_600_000;
-    const engagement = post.like_count * 2 + post.comment_count * 3 + post.repost_count * 4;
-    const bonus = close.has(post.author_id) ? 40 : 0;
-    const recency = Math.max(0, 72 - hours);
-    return { post, score: engagement + bonus + recency };
+    const hours = Math.max(0, (now - new Date(post.created_at).getTime()) / 3_600_000);
+    const engagement = post.like_count + post.comment_count * 1.6 + post.repost_count * 2.2;
+
+    // Recência com meia-vida de ~30 h: o novo aparece, mas não domina para sempre.
+    const freshness = Math.exp(-hours / 30) * 3;
+    const engagementScore = Math.log1p(engagement) * 1.6;
+    const views = Math.log1p(post.view_count ?? 0) * 0.25;
+
+    let affinity = 0;
+    if (post.author_id === viewerId) affinity = -1.6;
+    else if (mutual.has(post.author_id)) affinity = 3.4;
+    else if (following.has(post.author_id)) affinity = 2.2;
+
+    const communityBoost = post.community_id && communities.has(post.community_id) ? 0.9 : 0;
+
+    return {
+      post,
+      score: freshness + engagementScore + views + affinity + communityBoost,
+    };
   });
 
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((entry) => entry.post);
+
+  // Diversidade: no máximo 2 posts do mesmo autor na primeira passada.
+  const chosen: FeedPost[] = [];
+  const capped: FeedPost[] = [];
+  const perAuthor = new Map<string, number>();
+
+  for (const entry of scored) {
+    const used = perAuthor.get(entry.post.author_id) ?? 0;
+    if (used >= 2) {
+      capped.push(entry.post);
+      continue;
+    }
+    perAuthor.set(entry.post.author_id, used + 1);
+    chosen.push(entry.post);
+    if (chosen.length >= limit) break;
+  }
+
+  if (chosen.length < limit) {
+    const seen = new Set(chosen.map((post) => post.id));
+    for (const post of capped) {
+      if (seen.has(post.id)) continue;
+      chosen.push(post);
+      if (chosen.length >= limit) break;
+    }
+  }
+
+  return chosen.slice(0, limit);
 }
 
 export async function fetchPostById(postId: string): Promise<FeedPost | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("posts").select(POST_SELECT).eq("id", postId).maybeSingle();
+  const { data, error } = await supabase
+    .from("posts")
+    .select(POST_SELECT)
+    .eq("id", postId)
+    .is("hidden_at", null)
+    .maybeSingle();
   if (error || !data) return null;
   const row = data as unknown as RawPost;
   const ids = [row.id, row.repost_of].filter(Boolean);
@@ -255,6 +324,7 @@ export async function fetchComments(postId: string): Promise<CommentItem[]> {
     .from("posts")
     .select(POST_SELECT)
     .eq("root_post_id", postId)
+    .is("hidden_at", null)
     .order("created_at", { ascending: true })
     .limit(200);
 
@@ -731,6 +801,7 @@ export async function fetchMemories(viewerId: string): Promise<FeedPost[]> {
     .eq("author_id", viewerId)
     .is("root_post_id", null)
     .is("repost_of", null)
+    .is("hidden_at", null)
     .lt("created_at", cutoff)
     .order("created_at", { ascending: false })
     .limit(150);
@@ -768,6 +839,7 @@ export async function fetchFriendsActivity(viewerId: string): Promise<FeedPost[]
     .select(POST_SELECT)
     .in("author_id", ids)
     .is("root_post_id", null)
+    .is("hidden_at", null)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(5);

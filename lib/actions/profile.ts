@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
 import { normalizeAccent, normalizeNameFont } from "@/lib/profile-style";
+import { normalizeAvatarFrame } from "@/lib/avatar-frames";
 import { USERNAME_PATTERN } from "@/lib/utils";
 
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
@@ -13,6 +14,13 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Sua sessão expirou." };
+
+  const { data: currentProfile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+  const profileIsAdmin = Boolean(currentProfile?.is_admin);
 
   const displayName = String(formData.get("display_name") ?? "").trim();
   const username = String(formData.get("username") ?? "").trim().toLowerCase();
@@ -28,6 +36,8 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   const statusText = String(formData.get("status_text") ?? "").trim();
   const favoriteSong = String(formData.get("favorite_song") ?? "").trim();
   const favoriteSongArtist = String(formData.get("favorite_song_artist") ?? "").trim();
+  const songUrl = String(formData.get("song_url") ?? "").trim() || null;
+  const avatarFrame = normalizeAvatarFrame(String(formData.get("avatar_frame") ?? "none"));
   const profileStyle = String(formData.get("profile_style") ?? "modern") === "y2k" ? "y2k" : "modern";
   const showStats = formData.get("show_stats") === "on";
   const showVisits = formData.get("show_visits") === "on";
@@ -61,6 +71,12 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   if (bannerUrl && !bannerUrl.startsWith(storagePrefix)) {
     return { ok: false, error: "Endereço de banner inválido." };
   }
+  if (songUrl && !songUrl.startsWith(storagePrefix)) {
+    return { ok: false, error: "Endereço de música inválido." };
+  }
+  if (avatarFrame === "admin" && !profileIsAdmin) {
+    return { ok: false, error: "A moldura da equipe é reservada para a administração." };
+  }
 
   const { error } = await supabase
     .from("profiles")
@@ -77,6 +93,8 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       status_emoji: statusEmoji || null,
       favorite_song: favoriteSong || null,
       favorite_song_artist: favoriteSongArtist || null,
+      song_url: songUrl,
+      avatar_frame: avatarFrame,
       profile_style: profileStyle,
       show_stats: showStats,
       show_visits: showVisits,

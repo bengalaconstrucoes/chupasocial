@@ -1,25 +1,39 @@
 import Link from "next/link";
-import { ArrowRight, Compass, Hash, Sparkles, Trophy, TrendingUp, Users2 } from "lucide-react";
+import {
+  ArrowRight,
+  Compass,
+  Flame,
+  Hash,
+  Megaphone,
+  Sparkles,
+  Trophy,
+  TrendingUp,
+  Users2,
+} from "lucide-react";
 import { Avatar } from "@/components/avatar";
+import { Ducky } from "@/components/ducky";
 import { FollowButton } from "@/components/follow-button";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTrendingTags } from "@/lib/hashtags";
+import { fetchTrendingTopics } from "@/lib/topics";
 import { fetchFriendsActivity } from "@/lib/queries";
 import type { Profile } from "@/lib/types";
 
 export async function RightRail({ viewerId }: { viewerId: string }) {
   const supabase = await createClient();
 
-  const [{ data: followRows }, { data: communityRows }, trending, activity] = await Promise.all([
-    supabase.from("follows").select("following_id").eq("follower_id", viewerId),
-    supabase
-      .from("communities")
-      .select("id, slug, name, description, members:community_members(count)")
-      .order("created_at", { ascending: false })
-      .limit(4),
-    fetchTrendingTags(6),
-    fetchFriendsActivity(viewerId),
-  ]);
+  const [{ data: followRows }, { data: communityRows }, trending, topics, activity] =
+    await Promise.all([
+      supabase.from("follows").select("following_id").eq("follower_id", viewerId),
+      supabase
+        .from("communities")
+        .select("id, slug, name, description, members:community_members(count)")
+        .order("created_at", { ascending: false })
+        .limit(4),
+      fetchTrendingTags(6),
+      fetchTrendingTopics(6),
+      fetchFriendsActivity(viewerId),
+    ]);
 
   const followed = new Set((followRows ?? []).map((row: any) => row.following_id as string));
 
@@ -38,6 +52,39 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
 
   return (
     <div className="space-y-4">
+      <section className="chupa-card p-3.5">
+        <Ducky compact />
+      </section>
+
+      {topics.length > 0 && (
+        <section className="chupa-card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
+              <Flame size={14} className="text-accent" /> Assuntos do momento
+            </h2>
+            <span className="text-[0.68rem] text-muted">3 dias</span>
+          </div>
+          <ol className="mt-3 space-y-1">
+            {topics.map((topic, index) => (
+              <li key={topic.topic}>
+                <Link
+                  href={`/search?q=${encodeURIComponent(topic.topic)}&tab=publicacoes`}
+                  className="-mx-1.5 flex items-baseline gap-2 rounded-lg px-1.5 py-1.5 hover:bg-surface-2"
+                >
+                  <span className="w-3 text-[0.7rem] tabular-nums text-muted">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {topic.label}
+                  </span>
+                  <span className="text-[0.68rem] tabular-nums text-muted">
+                    {topic.count} {topic.count === 1 ? "post" : "posts"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <section className="chupa-card p-4">
         <div className="flex items-center justify-between">
           <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold">
@@ -126,6 +173,22 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
               className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
             >
               <Sparkles size={14} className="text-accent" /> Sua retrospectiva
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/avisos"
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
+            >
+              <Megaphone size={14} className="text-accent" /> Avisos da administração
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/patches"
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
+            >
+              <Sparkles size={14} className="text-accent" /> Novidades e patches
             </Link>
           </li>
         </ul>
@@ -219,8 +282,8 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
       <section className="chupa-card p-4">
         <h2 className="text-sm font-semibold">Sobre o ChupaSocial</h2>
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          Feed cronológico, comunidades e mensagens privadas. Sem algoritmo decidindo o que você
-          lê.
+          Comunidades, mensagens e chamadas. O feed "Para você" ordena por recência, engajamento e
+          quem você segue — e você pode trocar para "Seguindo" a qualquer momento.
         </p>
         <Link
           href="/search"

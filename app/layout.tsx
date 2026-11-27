@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import { THEME_SCRIPT } from "@/components/theme-toggle";
 import { BackgroundFx } from "@/components/background-fx";
-import { normalizeBackground } from "@/lib/background";
+import { normalizeBackground, normalizeBackgroundImage } from "@/lib/background";
 import "./globals.css";
 
 const body = Instrument_Sans({
@@ -47,6 +47,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const storedTheme = jar.get("chupa-theme")?.value;
   const theme = storedTheme === "dark" || storedTheme === "light" ? storedTheme : undefined;
   const background = normalizeBackground(jar.get("chupa-bg")?.value);
+  const rawBackgroundImage = jar.get("chupa-bg-image")?.value;
+  let decodedBackgroundImage: string | null = null;
+  if (rawBackgroundImage) {
+    try {
+      decodedBackgroundImage = decodeURIComponent(rawBackgroundImage);
+    } catch {
+      decodedBackgroundImage = rawBackgroundImage;
+    }
+  }
+  const backgroundImage = normalizeBackgroundImage(decodedBackgroundImage);
 
   return (
     <html lang="pt-BR" data-theme={theme} suppressHydrationWarning>
@@ -54,7 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className={`${body.variable} ${display.variable} font-sans antialiased`}>
-        <BackgroundFx initial={background} />
+        <BackgroundFx initial={background} initialImage={backgroundImage} />
         {children}
       </body>
     </html>

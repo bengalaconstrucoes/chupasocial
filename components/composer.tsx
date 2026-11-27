@@ -22,6 +22,26 @@ type CommunityOption = { id: string; name: string; slug: string };
 const MAX_IMAGES = 4;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+const MAX_VIDEO_DURATION = 10 * 60; // 10 minutos
+
+/** Lê a duração do vídeo no navegador antes de enviar. */
+function readVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      URL.revokeObjectURL(url);
+      resolve(duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    };
+    video.src = url;
+  });
+}
 
 type LocalMedia = {
   file: File;
@@ -67,7 +87,7 @@ export function Composer({
     !pollInvalid &&
     !pending;
 
-  function addFiles(files: FileList | null) {
+  async function addFiles(files: FileList | File[] | null) {
     if (!files) return;
     setError(null);
     const next = [...media];
@@ -90,7 +110,12 @@ export function Composer({
           continue;
         }
         if (file.size > MAX_VIDEO_SIZE) {
-          setError("O vídeo pode ter até 50 MB.");
+          setError("O vídeo pode ter até 50 MB (cerca de 10 minutos em qualidade média).");
+          continue;
+        }
+        const duration = await readVideoDuration(file);
+        if (duration > MAX_VIDEO_DURATION) {
+          setError("O vídeo pode ter no máximo 10 minutos.");
           continue;
         }
         next.push({ file, preview: URL.createObjectURL(file), kind: "video" });
@@ -195,6 +220,13 @@ export function Composer({
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onPaste={(event) => {
+              const pasted = Array.from(event.clipboardData?.files ?? []);
+              if (pasted.length > 0) {
+                event.preventDefault();
+                void addFiles(pasted);
+              }
+            }}
             placeholder={placeholder}
             autoFocus={autoFocus}
             rows={content.length > 120 ? 5 : 2}
@@ -345,7 +377,7 @@ export function Composer({
               accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
               multiple
               hidden
-              onChange={(event) => addFiles(event.target.files)}
+              onChange={(event) => void addFiles(event.target.files)}
             />
             <button
               type="button"
@@ -353,7 +385,7 @@ export function Composer({
               disabled={pending || media.length >= MAX_IMAGES}
               className="btn btn-quiet !rounded-lg !px-2 !py-1.5 text-accent"
               aria-label="Adicionar imagens ou vídeo"
-              title="Imagem, GIF ou vídeo"
+              title="Imagem, GIF ou vídeo (até 10 min). Você também pode colar com Ctrl+V."
             >
               <ImagePlus size={18} />
             </button>

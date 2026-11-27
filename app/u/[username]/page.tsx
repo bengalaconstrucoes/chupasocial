@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { Ban, UserX } from "lucide-react";
@@ -51,10 +52,20 @@ export async function generateMetadata({
 
 export default async function ProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ username: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { username } = await params;
+  const requestedTab = (await searchParams).tab;
+  const tab: "posts" | "reposts" | "replies" =
+    requestedTab === "reposts" || requestedTab === "respostas"
+      ? requestedTab === "reposts"
+        ? "reposts"
+        : "replies"
+      : "posts";
+
   const { profile, viewer, supabase } = await load(username);
 
   if (!viewer) redirect(`/login?next=/u/${username}`);
@@ -64,9 +75,15 @@ export default async function ProfilePage({
   const [stats, followState, posts, blockData, album, achievements] = await Promise.all([
     fetchProfileStats(profile.id),
     fetchFollowState(viewer.id, profile.id),
-    fetchFeed({ mode: "profile", profileId: profile.id, viewerId: viewer.id, limit: 12 }),
+    fetchFeed({
+      mode: "profile",
+      profileId: profile.id,
+      viewerId: viewer.id,
+      limit: 12,
+      filter: tab,
+    }),
     isOwner ? Promise.resolve({ data: "none" }) : supabase.rpc("block_state", { p_user: profile.id }),
-    fetchAlbum(profile.id),
+    tab === "posts" ? fetchAlbum(profile.id) : Promise.resolve([]),
     fetchAchievementCounts(profile.id),
   ]);
 
@@ -81,7 +98,9 @@ export default async function ProfilePage({
 
   const [visits, pinnedPost] = await Promise.all([
     profile.show_visits || isOwner ? fetchProfileVisits(profile.id) : Promise.resolve(null),
-    profile.pinned_post_id && !locked ? fetchPostById(profile.pinned_post_id) : Promise.resolve(null),
+    profile.pinned_post_id && !locked && tab === "posts"
+      ? fetchPostById(profile.pinned_post_id)
+      : Promise.resolve(null),
   ]);
 
   const orderedPosts =
@@ -134,7 +153,28 @@ export default async function ProfilePage({
           )
         ) : (
           <>
-          {(isOwner || album.length > 0) && (
+          <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-4 py-2 sm:px-5">
+            {[
+              { key: "posts" as const, label: "Publicações", href: `/u/${profile.username}` },
+              { key: "reposts" as const, label: "Reposts", href: `/u/${profile.username}?tab=reposts` },
+              { key: "replies" as const, label: "Respostas", href: `/u/${profile.username}?tab=respostas` },
+            ].map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                aria-current={tab === item.key ? "page" : undefined}
+                className={
+                  tab === item.key
+                    ? "shrink-0 rounded-full bg-accent-soft px-3.5 py-1.5 text-sm font-medium text-accent"
+                    : "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink"
+                }
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {(isOwner || album.length > 0) && tab === "posts" && (
             <ProfileAlbum
               userId={profile.id}
               photos={album}
@@ -147,11 +187,28 @@ export default async function ProfilePage({
             viewerId={viewer.id}
             mode="profile"
             profileId={profile.id}
-            emptyTitle={isOwner ? "Você ainda não publicou nada" : "Nenhuma publicação por aqui"}
+            filter={tab}
+            emptyTitle={
+              tab === "reposts"
+                ? "Nenhum repost por aqui"
+                : tab === "replies"
+                  ? "Nenhuma resposta por aqui"
+                  : isOwner
+                    ? "Você ainda não publicou nada"
+                    : "Nenhuma publicação por aqui"
+            }
             emptyDescription={
-              isOwner
-                ? "Volte ao início e conte o que está acontecendo. Sua primeira publicação aparece aqui."
-                : `Quando @${profile.username} publicar algo, aparece aqui.`
+              tab === "reposts"
+                ? isOwner
+                  ? "Quando você repostar algo, aparece aqui."
+                  : `Quando @${profile.username} repostar algo, aparece aqui.`
+                : tab === "replies"
+                  ? isOwner
+                    ? "Suas respostas aparecem aqui separadas das publicações."
+                    : `As respostas de @${profile.username} aparecem aqui.`
+                  : isOwner
+                    ? "Volte ao início e conte o que está acontecendo. Sua primeira publicação aparece aqui."
+                    : `Quando @${profile.username} publicar algo, aparece aqui.`
             }
           />
           </>

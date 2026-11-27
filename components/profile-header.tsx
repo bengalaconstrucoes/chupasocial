@@ -1,7 +1,14 @@
 import Link from "next/link";
-import { CalendarDays, Eye, LinkIcon, Lock, MapPin } from "lucide-react";
+import { CalendarDays, Eye, Heart, LinkIcon, Lock, MapPin } from "lucide-react";
 import { Avatar } from "@/components/avatar";
-import { FavoriteSong, FlagBadge, StatusLine, VerifiedBadge } from "@/components/badges";
+import {
+  AdminBadge,
+  FavoriteSong,
+  FlagBadge,
+  StatusLine,
+  VerifiedBadge,
+} from "@/components/badges";
+import { ProfileMusic } from "@/components/profile-music";
 import { FollowButton } from "@/components/follow-button";
 import { MessageButton } from "@/components/message-button";
 import { ProfileMenu } from "@/components/profile-menu";
@@ -86,6 +93,24 @@ export function ProfileHeader({
           </div>
         </div>
 
+        {y2k && (
+          <div className="chupa-y2k-window mt-3 overflow-hidden">
+            <div className="chupa-y2k-bar flex items-center justify-between gap-2">
+              <span>✦ bem-vindo ao meu perfil ✦</span>
+              <span>visitas: {formatCount(visits)}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 text-[0.68rem] text-muted">
+              <span>@{profile.username}</span>
+              {profile.status_text && (
+                <span>
+                  {profile.status_emoji} {profile.status_text}
+                </span>
+              )}
+              <span className="ml-auto">desde {new Date(profile.created_at).getFullYear()}</span>
+            </div>
+          </div>
+        )}
+
         <div className="mt-3">
           <div className="flex flex-wrap items-center gap-2">
             <h1
@@ -98,6 +123,7 @@ export function ProfileHeader({
               {profile.display_name}
             </h1>
             {profile.is_verified && <VerifiedBadge size={18} />}
+            {profile.is_admin && <AdminBadge size={18} />}
             <FlagBadge flagId={profile.flag} size={16} />
             {profile.is_private && (
               <span className="chip !py-0.5">
@@ -159,10 +185,18 @@ export function ProfileHeader({
             )}
           </div>
 
-          {(profile.favorite_song || profile.favorite_song_artist) && (
-            <div className="mt-2">
-              <FavoriteSong song={profile.favorite_song} artist={profile.favorite_song_artist} />
-            </div>
+          {profile.song_url ? (
+            <ProfileMusic
+              url={profile.song_url}
+              title={profile.favorite_song}
+              artist={profile.favorite_song_artist}
+            />
+          ) : (
+            (profile.favorite_song || profile.favorite_song_artist) && (
+              <div className="mt-2">
+                <FavoriteSong song={profile.favorite_song} artist={profile.favorite_song_artist} />
+              </div>
+            )
           )}
 
           <div className="mt-3 flex gap-5 text-sm">
@@ -183,6 +217,15 @@ export function ProfileHeader({
               isOwner && (
                 <span className="text-[0.72rem] text-muted">estatísticas ocultas</span>
               )
+            )}
+            {achievements && (
+              <span
+                className="inline-flex items-center gap-1 text-muted"
+                title="Curtidas recebidas nas suas publicações"
+              >
+                <Heart size={12} /> {formatCount(achievements.likes)}{" "}
+                <span className="text-muted">curtidas recebidas</span>
+              </span>
             )}
             {(profile.show_visits || isOwner) && visits > 0 && (
               <span className="inline-flex items-center gap-1 text-muted" title="Visitas ao perfil">

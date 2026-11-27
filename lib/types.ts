@@ -16,6 +16,9 @@ export type Profile = {
   status_emoji: string | null;
   favorite_song: string | null;
   favorite_song_artist: string | null;
+  song_url?: string | null;
+  avatar_frame?: string | null;
+  muted_until?: string | null;
   pinned_post_id: string | null;
   show_stats: boolean;
   show_visits: boolean;
@@ -59,6 +62,7 @@ export type FeedPost = Post & {
   like_count: number;
   comment_count: number;
   repost_count: number;
+  view_count: number;
   liked_by_me: boolean;
   reposted_by_me: boolean;
   saved_by_me: boolean;

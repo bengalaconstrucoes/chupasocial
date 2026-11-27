@@ -36,6 +36,37 @@ export function VerifiedBadge({
   );
 }
 
+/** Emblema da equipe: escudo com estrela. */
+export function AdminBadge({
+  size = 15,
+  className,
+  label = "Equipe ChupaSocial",
+}: {
+  size?: number;
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex shrink-0", className)}
+      title={label}
+      aria-label={label}
+      role="img"
+    >
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden>
+        <path
+          fill="#7c3aed"
+          d="M12 1.8l8 3v6.1c0 5-3.3 9.2-8 11.3-4.7-2.1-8-6.3-8-11.3V4.8z"
+        />
+        <path
+          d="M12 6.4l1.5 3.1 3.4.5-2.5 2.4.6 3.4-3-1.6-3 1.6.6-3.4-2.5-2.4 3.4-.5z"
+          fill="#fff"
+        />
+      </svg>
+    </span>
+  );
+}
+
 export function FlagBadge({
   flagId,
   size = 18,
@@ -48,23 +79,38 @@ export function FlagBadge({
   const flag = findFlag(flagId);
   if (!flag) return null;
 
+  const inner = Math.max(9, size * 0.62);
+
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle text-[0.5rem] font-bold uppercase tracking-tight text-white shadow-sm ring-1 ring-black/10",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle shadow-sm ring-1 ring-black/15",
         className,
       )}
       style={{
         width: size * 1.45,
         height: size,
         background: flagBackground(flag),
-        textShadow: "0 1px 1px rgb(0 0 0 / 0.55)",
       }}
       title={`Bandeira: ${flag.label}`}
       aria-label={`Bandeira: ${flag.label}`}
       role="img"
     >
-      <span className="opacity-90">{flag.code}</span>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(160deg, rgb(255 255 255 / 0.35) 0%, transparent 45%, rgb(0 0 0 / 0.18) 100%)",
+        }}
+      />
+      <span
+        className="relative flex items-center justify-center rounded-full bg-white/95 font-bold leading-none text-[#17131a] shadow-[0_1px_2px_rgb(0_0_0_/_0.35)]"
+        style={{ width: inner, height: inner, fontSize: Math.max(5, size * 0.3) }}
+        aria-hidden
+      >
+        {flag.code}
+      </span>
     </span>
   );
 }

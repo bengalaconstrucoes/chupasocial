@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  Eye,
   Heart,
   Loader2,
   MessageCircle,
@@ -33,6 +34,7 @@ type Props = {
   likeCount: number;
   commentCount: number;
   repostCount: number;
+  viewCount?: number;
   liked: boolean;
   reposted: boolean;
   isOwner: boolean;
@@ -49,6 +51,7 @@ export function PostActions({
   likeCount,
   commentCount,
   repostCount,
+  viewCount = 0,
   liked,
   reposted,
   isOwner,
@@ -332,6 +335,15 @@ export function PostActions({
         </button>
 
         <SavedPostButton postId={postId} initialSaved={saved} />
+
+        <span
+          className="inline-flex items-center gap-1 px-1.5 text-[0.68rem] text-muted"
+          title={`${viewCount} ${viewCount === 1 ? "visualização" : "visualizações"}`}
+          aria-label={`${viewCount} visualizações`}
+        >
+          <Eye size={15} />
+          <span className="tabular-nums">{viewCount > 0 ? formatCount(viewCount) : ""}</span>
+        </span>
 
         {(isOwner || canEdit) && (
           <div className="relative ml-auto">

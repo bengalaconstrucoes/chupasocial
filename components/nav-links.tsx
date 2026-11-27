@@ -8,7 +8,9 @@ import {
   Compass,
   Home,
   Mail,
+  Megaphone,
   Search,
+  Sparkles,
   Settings,
   User,
   Users,
@@ -27,6 +29,8 @@ const baseItems = [
   { href: "/communities", label: "Comunidades", icon: Users, exact: false },
   { href: "/notifications", label: "Notificações", icon: Bell, exact: false },
   { href: "/messages", label: "Mensagens", icon: Mail, exact: false },
+  { href: "/avisos", label: "Avisos", icon: Megaphone, exact: false },
+  { href: "/patches", label: "Novidades", icon: Sparkles, exact: false },
   { href: "/saved", label: "Salvos", icon: Bookmark, exact: false },
 ];
 

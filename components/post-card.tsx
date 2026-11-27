@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Lock, Users } from "lucide-react";
 import { Avatar } from "@/components/avatar";
-import { VerifiedBadge } from "@/components/badges";
+import { AdminBadge, VerifiedBadge } from "@/components/badges";
 import { PostActions } from "@/components/post-actions";
+import { PostViewTracker } from "@/components/post-view-tracker";
 import { PostMediaGrid } from "@/components/media-lightbox";
 import { PollBlock } from "@/components/poll-block";
 import { RichText } from "@/components/rich-text";
@@ -30,6 +31,7 @@ function PostBody({
 
   return (
     <article className={cn("px-4 py-3.5 sm:px-5", embedded && "rounded-xl border border-line bg-bg px-3.5 py-3")}>
+      <PostViewTracker postId={post.id} />
       <header className="flex items-start gap-3">
         <Avatar profile={author} size={embedded ? 32 : 40} />
         <div className="min-w-0 flex-1">
@@ -41,6 +43,7 @@ function PostBody({
               {author.display_name}
             </Link>
             {author.is_verified && <VerifiedBadge size={14} />}
+            {author.is_admin && <AdminBadge size={14} />}
             {author.is_private && <Lock size={12} className="text-muted" aria-label="Perfil privado" />}
             <span className="truncate text-muted">@{author.username}</span>
             <span className="text-muted" aria-hidden>
@@ -100,6 +103,7 @@ function PostBody({
           likeCount={post.like_count}
           commentCount={post.comment_count}
           repostCount={post.repost_count}
+          viewCount={post.view_count}
           liked={post.liked_by_me}
           reposted={post.reposted_by_me}
           isOwner={isOwner}
@@ -171,6 +175,7 @@ export function PostCard({
               likeCount={post.like_count}
               commentCount={post.comment_count}
               repostCount={post.repost_count}
+              viewCount={post.view_count}
               liked={post.liked_by_me}
               reposted={post.reposted_by_me}
               isOwner={post.author_id === viewerId}

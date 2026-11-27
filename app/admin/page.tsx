@@ -21,23 +21,31 @@ export default async function AdminPage() {
     .maybeSingle();
   if (!profile?.is_admin) notFound();
 
-  const [{ data: reportRows }, { data: userRows }, { data: feedbackRows }] = await Promise.all([
+  const [{ data: reportRows }, { data: userRows }, { data: feedbackRows }, { data: flagRows }] =
+    await Promise.all([
     supabase
       .from("reports")
       .select("id, reporter_id, target_type, target_id, reason, details, status, created_at")
       .order("created_at", { ascending: false })
       .limit(40),
     supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, is_verified, is_admin, created_at")
-      .order("created_at", { ascending: false })
-      .limit(15),
-    supabase
-      .from("feedback")
-      .select("id, user_id, mood, body, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(25),
-  ]);
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, is_verified, is_admin, muted_until, created_at")
+        .order("created_at", { ascending: false })
+        .limit(15),
+      supabase
+        .from("feedback")
+        .select("id, user_id, mood, body, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(25),
+      supabase
+        .from("moderation_flags")
+        .select(
+          "id, post_id, reason, severity, created_at, post:posts(id, content, hidden_at, author:profiles!posts_author_id_fkey(username, display_name))",
+        )
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
 
   const peopleIds = [
     ...new Set([
@@ -84,6 +92,16 @@ export default async function AdminPage() {
             status: row.status,
             created_at: row.created_at,
             username: peopleMap.get(row.user_id)?.username ?? "removido",
+          }))}
+          flags={(flagRows ?? []).map((row: any) => ({
+            id: row.id,
+            post_id: row.post_id,
+            reason: row.reason,
+            severity: row.severity,
+            created_at: row.created_at,
+            hidden: Boolean(row.post?.hidden_at),
+            content: (row.post?.content as string | null) ?? "",
+            author: (row.post?.author as { username: string; display_name: string } | null) ?? null,
           }))}
         />
       </div>

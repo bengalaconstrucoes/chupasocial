@@ -64,7 +64,7 @@ export default async function SettingsPage() {
             </div>
             <div className="border-t border-line pt-4">
               <span className="field-label">Fundo animado</span>
-              <BackgroundPicker />
+              <BackgroundPicker userId={profile.id} />
             </div>
           </div>
         </section>

@@ -14,6 +14,7 @@ export function FeedList({
   profileId,
   communityId,
   tag,
+  filter,
   emptyTitle,
   emptyDescription,
 }: {
@@ -23,6 +24,7 @@ export function FeedList({
   profileId?: string;
   communityId?: string;
   tag?: string;
+  filter?: "all" | "posts" | "reposts" | "replies";
   emptyTitle: string;
   emptyDescription: string;
 }) {
@@ -45,6 +47,7 @@ export function FeedList({
         profileId,
         communityId,
         tag,
+        filter,
       });
       if (next.length === 0) {
         setDone(true);
