@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  CalendarClock,
   CalendarDays,
   Eye,
   Heart,
@@ -170,6 +171,14 @@ export function ProfileHeader({
                         <Lock size={10} /> privado
                       </span>
                     )}
+                    {isOwner &&
+                      profile.suspended_until &&
+                      new Date(profile.suspended_until).getTime() > Date.now() && (
+                        <span className="chip !py-0.5 !text-danger">
+                          <CalendarClock size={10} /> suspenso até{" "}
+                          {formatDate(profile.suspended_until)}
+                        </span>
+                      )}
                   </div>
 
                   <p className="mt-1.5 text-[0.7rem] text-muted">
@@ -415,6 +424,14 @@ export function ProfileHeader({
                   <Lock size={11} /> privado
                 </span>
               )}
+              {isOwner &&
+                profile.suspended_until &&
+                new Date(profile.suspended_until).getTime() > Date.now() && (
+                  <span className="chip !py-0.5 !text-danger">
+                    <CalendarClock size={11} /> suspenso até{" "}
+                    {formatDate(profile.suspended_until)}
+                  </span>
+                )}
             </div>
             <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
               @{profile.username}

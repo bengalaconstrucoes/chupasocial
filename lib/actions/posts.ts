@@ -22,6 +22,23 @@ function fail(message: string): ActionResult {
   return { ok: false, error: message };
 }
 
+/** Suspensão: a pessoa continua lendo, mas não publica nem responde. */
+async function suspensionMessage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const { data } = await supabase
+    .from("profiles")
+    .select("suspended_until")
+    .eq("id", userId)
+    .maybeSingle();
+  const until = data?.suspended_until as string | null | undefined;
+  if (!until || new Date(until).getTime() <= Date.now()) return null;
+  return `Sua conta está suspensa até ${new Date(until).toLocaleDateString(
+    "pt-BR",
+  )}. Você pode ler, mas não publicar.`;
+}
+
 function translate(error: { message: string }): string {
   if (/rate limit|Muitas ações/i.test(error.message)) {
     return "Você está publicando rápido demais. Aguarde alguns instantes.";
@@ -44,6 +61,8 @@ export async function createPostAction(formData: FormData): Promise<ActionResult
   if (await isMuted(supabase, user.id)) {
     return fail("Sua conta está silenciada pela moderação por enquanto.");
   }
+  const suspended = await suspensionMessage(supabase, user.id);
+  if (suspended) return fail(suspended);
 
   const content = String(formData.get("content") ?? "").trim();
   const communityId = String(formData.get("community_id") ?? "") || null;
@@ -388,6 +407,8 @@ export async function addCommentAction(
   if (await isMuted(supabase, user.id)) {
     return fail("Sua conta está silenciada pela moderação por enquanto.");
   }
+  const suspended = await suspensionMessage(supabase, user.id);
+  if (suspended) return fail(suspended);
 
   const trimmed = content.trim();
   if (!trimmed) return fail("Escreva uma resposta.");

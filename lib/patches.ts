@@ -8,6 +8,19 @@ export type Patch = {
 /** Registro de atualizações do site, exibido em /patches. */
 export const PATCHES: Patch[] = [
   {
+    version: "0.7.0",
+    date: "2026-11-27",
+    title: "Denúncias com prints e moderação com sanções",
+    highlights: [
+      "Qualquer pessoa pode denunciar uma publicação ou uma conta, escolher o motivo, justificar e anexar até 3 prints.",
+      "As denúncias chegam numa área exclusiva de moderadores, com o conteúdo denunciado e as provas à vista.",
+      "Moderador escolhe o tempo de silêncio: 1 hora, 24 horas ou 7 dias.",
+      "Suspensão por tempo: a conta continua lendo, mas não publica nem responde até o prazo acabar.",
+      "Banimento definitivo exclui a conta e todo o conteúdo dela.",
+      "Prints das denúncias ficam em armazenamento privado, visível só para a moderação.",
+    ],
+  },
+  {
     version: "0.6.1",
     date: "2026-11-27",
     title: "Feed que não repete o que você já viu",

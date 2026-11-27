@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
+  Ban,
+  CalendarClock,
   EyeOff,
   Loader2,
   MailOpen,
@@ -16,12 +18,14 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import {
+  banUserAction,
   markFeedbackReadAction,
   resolveReportAction,
   setPostHiddenAction,
   setUserAdminAction,
   setUserMutedAction,
   setUserVerifiedAction,
+  suspendUserAction,
 } from "@/lib/actions/admin";
 import { formatDate } from "@/lib/utils";
 
@@ -34,6 +38,9 @@ export type AdminReport = {
   status: "open" | "reviewed" | "dismissed";
   created_at: string;
   reporter: { username: string; display_name: string } | null;
+  target_author?: { id: string; username: string; display_name: string } | null;
+  target_excerpt?: string | null;
+  evidence_urls?: string[];
 };
 
 export type AdminUser = {
@@ -76,6 +83,220 @@ const REASON_LABEL: Record<string, string> = {
   misinformation: "desinformação",
   other: "outro",
 };
+
+const MUTE_OPTIONS = [
+  { value: 60, label: "1 hora" },
+  { value: 1440, label: "24 horas" },
+  { value: 10080, label: "7 dias" },
+];
+
+const SUSPEND_OPTIONS = [
+  { value: 1, label: "1 dia" },
+  { value: 7, label: "7 dias" },
+  { value: 30, label: "30 dias" },
+  { value: 90, label: "90 dias" },
+];
+
+function ReportRow({
+  report,
+  pending,
+  onResolve,
+  onMute,
+  onSuspend,
+  onBan,
+}: {
+  report: AdminReport;
+  pending: boolean;
+  onResolve: (report: AdminReport, status: "reviewed" | "dismissed") => void;
+  onMute: (userId: string, minutes: number) => void;
+  onSuspend: (userId: string, days: number) => void;
+  onBan: (userId: string) => void;
+}) {
+  const [muteMinutes, setMuteMinutes] = useState(1440);
+  const [suspendDays, setSuspendDays] = useState(7);
+  const [confirmBan, setConfirmBan] = useState(false);
+  const author = report.target_author ?? null;
+  const targetLink =
+    report.target_type === "post"
+      ? `/post/${report.target_id}`
+      : author
+        ? `/u/${author.username}`
+        : null;
+
+  return (
+    <li className="chupa-card px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="chip !py-0.5">{REASON_LABEL[report.reason] ?? report.reason}</span>
+        <span>{report.target_type === "post" ? "publicação" : report.target_type === "profile" ? "perfil" : "mensagem"}</span>
+        {targetLink && (
+          <Link href={targetLink} className="text-accent hover:underline">
+            ver conteúdo
+          </Link>
+        )}
+        <span className="ml-auto">{formatDate(report.created_at)}</span>
+      </div>
+
+      {author && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
+          <span className="text-muted">denunciado:</span>
+          <Link href={`/u/${author.username}`} className="font-semibold hover:underline">
+            {author.display_name}
+          </Link>
+          <span className="text-xs text-muted">@{author.username}</span>
+        </p>
+      )}
+
+      {report.target_excerpt && (
+        <p className="mt-1 line-clamp-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-1.5 text-[0.8rem] text-muted">
+          {report.target_excerpt}
+        </p>
+      )}
+
+      {report.details && (
+        <p className="mt-1.5 text-sm">
+          <span className="text-muted">justificativa: </span>“{report.details}”
+        </p>
+      )}
+
+      {(report.evidence_urls ?? []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(report.evidence_urls ?? []).map((url, index) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Abrir print"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Print enviado ${index + 1}`}
+                className="h-16 w-16 rounded-lg border border-line object-cover transition-transform hover:scale-105"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-1.5 text-[0.7rem] text-muted">
+        denunciado por{" "}
+        {report.reporter ? (
+          <Link href={`/u/${report.reporter.username}`} className="hover:underline">
+            @{report.reporter.username}
+          </Link>
+        ) : (
+          "conta removida"
+        )}
+      </p>
+
+      {author && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line pt-2">
+          <select
+            value={muteMinutes}
+            onChange={(event) => setMuteMinutes(Number(event.target.value))}
+            aria-label="Duração do silêncio"
+            className="rounded-lg border border-line bg-surface px-2 py-1 text-[0.7rem]"
+          >
+            {MUTE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onMute(author.id, muteMinutes)}
+            disabled={pending}
+            className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
+          >
+            <VolumeX size={12} /> silenciar
+          </button>
+
+          <select
+            value={suspendDays}
+            onChange={(event) => setSuspendDays(Number(event.target.value))}
+            aria-label="Duração da suspensão"
+            className="rounded-lg border border-line bg-surface px-2 py-1 text-[0.7rem]"
+          >
+            {SUSPEND_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onSuspend(author.id, suspendDays)}
+            disabled={pending}
+            className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
+            title="Suspender: a pessoa lê, mas não publica"
+          >
+            <CalendarClock size={12} /> suspender
+          </button>
+
+          {confirmBan ? (
+            <span className="flex items-center gap-1.5 rounded-lg border border-danger/40 px-2 py-1 text-[0.7rem]">
+              <span>excluir a conta de @{author.username}?</span>
+              <button
+                type="button"
+                onClick={() => onBan(author.id)}
+                disabled={pending}
+                className="font-semibold text-danger hover:underline"
+              >
+                confirmar
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmBan(false)}
+                className="text-muted hover:text-ink"
+              >
+                cancelar
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmBan(true)}
+              disabled={pending}
+              className="btn btn-quiet ml-auto !px-2.5 !py-1 text-[0.7rem] text-danger"
+              title="Banir: exclui a conta e o conteúdo"
+            >
+              <Ban size={12} /> banir
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2 flex items-center gap-2">
+        {report.status === "open" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onResolve(report, "reviewed")}
+              disabled={pending}
+              className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
+            >
+              <BadgeCheck size={12} /> revisada
+            </button>
+            <button
+              type="button"
+              onClick={() => onResolve(report, "dismissed")}
+              disabled={pending}
+              className="btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
+            >
+              <X size={12} /> dispensar
+            </button>
+          </>
+        ) : (
+          <span className="text-[0.7rem] text-muted">
+            {report.status === "reviewed" ? "revisada" : "dispensada"}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export function AdminPanel({
   reports: initialReports,
@@ -130,6 +351,42 @@ export function AdminPanel({
           item.id === user.id ? { ...item, is_admin: !item.is_admin } : item,
         ),
       );
+      router.refresh();
+    });
+  }
+
+  function muteReported(userId: string, minutes: number) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setUserMutedAction(userId, minutes);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function suspendReported(userId: string, days: number) {
+    setError(null);
+    startTransition(async () => {
+      const result = await suspendUserAction(userId, days);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function banReported(userId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await banUserAction(userId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -214,68 +471,22 @@ export function AdminPanel({
 
       <section>
         <h2 className="mb-3 text-sm font-semibold">
-          Denúncias abertas ({reports.filter((report) => report.status === "open").length})
+          Moderação — denúncias abertas ({reports.filter((report) => report.status === "open").length})
         </h2>
         {reports.length === 0 ? (
           <p className="chupa-card p-4 text-xs text-muted">Nenhuma denúncia registrada.</p>
         ) : (
-          <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+          <ul className="space-y-3">
             {reports.map((report) => (
-              <li key={report.id} className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <span className="chip !py-0.5">{REASON_LABEL[report.reason] ?? report.reason}</span>
-                  <span>{report.target_type}</span>
-                  {report.target_type === "post" && (
-                    <Link
-                      href={`/post/${report.target_id}`}
-                      className="text-accent hover:underline"
-                    >
-                      ver conteúdo
-                    </Link>
-                  )}
-                  <span className="ml-auto">{formatDate(report.created_at)}</span>
-                </div>
-                <p className="mt-1.5 text-sm">
-                  Denunciado por{" "}
-                  {report.reporter ? (
-                    <Link
-                      href={`/u/${report.reporter.username}`}
-                      className="font-medium hover:underline"
-                    >
-                      @{report.reporter.username}
-                    </Link>
-                  ) : (
-                    "conta removida"
-                  )}
-                  {report.details ? `: “${report.details}”` : ""}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  {report.status === "open" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => resolve(report, "reviewed")}
-                        disabled={pending}
-                        className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
-                      >
-                        <BadgeCheck size={12} /> revisada
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => resolve(report, "dismissed")}
-                        disabled={pending}
-                        className="btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
-                      >
-                        <X size={12} /> dispensar
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-[0.7rem] text-muted">
-                      {report.status === "reviewed" ? "revisada" : "dispensada"}
-                    </span>
-                  )}
-                </div>
-              </li>
+              <ReportRow
+                key={report.id}
+                report={report}
+                pending={pending}
+                onResolve={resolve}
+                onMute={muteReported}
+                onSuspend={suspendReported}
+                onBan={banReported}
+              />
             ))}
           </ul>
         )}

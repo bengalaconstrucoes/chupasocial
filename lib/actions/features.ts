@@ -55,6 +55,7 @@ export async function reportAction(input: {
   targetId: string;
   reason: string;
   details?: string;
+  evidencePaths?: string[];
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -71,12 +72,18 @@ export async function reportAction(input: {
   const details = (input.details ?? "").trim();
   if (details.length > 500) return fail("Detalhes muito longos.");
 
+  const evidence = (input.evidencePaths ?? [])
+    .map((path) => path.trim())
+    .filter((path) => path.startsWith(`${user.id}/`) && path.length <= 200)
+    .slice(0, 3);
+
   const { error } = await supabase.from("reports").insert({
     reporter_id: user.id,
     target_type: input.targetType,
     target_id: input.targetId,
     reason: input.reason,
     details: details || null,
+    evidence_paths: evidence,
   });
 
   if (error) {

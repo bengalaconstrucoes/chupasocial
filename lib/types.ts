@@ -23,6 +23,7 @@ export type Profile = {
   song_text_color?: string | null;
   song_bubble_color?: string | null;
   muted_until?: string | null;
+  suspended_until?: string | null;
   pinned_post_id: string | null;
   show_stats: boolean;
   show_visits: boolean;

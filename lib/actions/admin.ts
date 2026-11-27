@@ -132,6 +132,54 @@ export async function setUserMutedAction(
   };
 }
 
+function sanctionError(message: string): string {
+  if (/not_admin/i.test(message)) return "Apenas administradores podem fazer isso.";
+  if (/self/i.test(message)) return "Você não pode aplicar isso na própria conta.";
+  return "Não foi possível concluir a ação.";
+}
+
+/** Suspende o perfil por N dias: a pessoa lê tudo, mas não publica. 0 remove. */
+export async function suspendUserAction(
+  userId: string,
+  days: number,
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
+  if (!Number.isFinite(days) || days < 0 || days > 365) {
+    return { ok: false, error: "Prazo inválido." };
+  }
+
+  const { error } = await admin.supabase.rpc("admin_suspend_user", {
+    p_user: userId,
+    p_days: Math.round(days),
+  });
+
+  if (error) return { ok: false, error: sanctionError(error.message) };
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return {
+    ok: true,
+    message:
+      days === 0 ? "Suspensão removida." : `Perfil suspenso por ${Math.round(days)} dia(s).`,
+  };
+}
+
+/** Banimento definitivo: a conta e o conteúdo são excluídos. */
+export async function banUserAction(userId: string): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
+
+  const { error } = await admin.supabase.rpc("admin_ban_user", { p_user: userId });
+  if (error) return { ok: false, error: sanctionError(error.message) };
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { ok: true, message: "Conta banida e conteúdo removido." };
+}
+
 export async function markFeedbackReadAction(feedbackId: string): Promise<ActionResult> {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };

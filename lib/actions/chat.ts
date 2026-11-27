@@ -35,13 +35,19 @@ export async function sendChatMessageAction(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, display_name, avatar_url, avatar_frame, muted_until")
+    .select("username, display_name, avatar_url, avatar_frame, muted_until, suspended_until")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!profile) return { ok: false, error: "Perfil não encontrado." };
   if (profile.muted_until && new Date(profile.muted_until).getTime() > Date.now()) {
     return { ok: false, error: "Sua conta está silenciada pela moderação por enquanto." };
+  }
+  if (profile.suspended_until && new Date(profile.suspended_until).getTime() > Date.now()) {
+    return {
+      ok: false,
+      error: `Sua conta está suspensa até ${new Date(profile.suspended_until).toLocaleDateString("pt-BR")}. Você pode ler, mas não publicar.`,
+    };
   }
 
   const { data, error } = await supabase
