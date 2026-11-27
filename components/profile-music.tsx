@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2, Music2, Pause, Play } from "lucide-react";
+import { ExternalLink, Music2, Pause, Play } from "lucide-react";
 import { parseMusicUrl } from "@/lib/music";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +29,24 @@ export function ProfileMusic({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [meta, setMeta] = useState<{ title: string; artist: string } | null>(null);
+
+  // Nome da música e do artista vêm do próprio link (título do vídeo/track).
+  useEffect(() => {
+    if (!source) return;
+    let alive = true;
+    fetch(`/api/music-meta?url=${encodeURIComponent(url)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { title?: string; artist?: string } | null) => {
+        if (!alive || !data?.title) return;
+        setMeta({ title: data.title, artist: data.artist ?? "" });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
 
   useEffect(() => {
     if (source?.kind !== "audio") return;
@@ -66,7 +83,6 @@ export function ProfileMusic({
     setMounted((current) => {
       const next = !current;
       setPlaying(next);
-      setLoading(next);
       return next;
     });
   }
@@ -95,21 +111,15 @@ export function ProfileMusic({
               : "bg-surface-2/80 text-ink hover:bg-surface-2",
           )}
         >
-          {loading ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : playing ? (
-            <Pause size={13} />
-          ) : (
-            <Play size={13} />
-          )}
+          {playing ? <Pause size={13} /> : <Play size={13} />}
         </button>
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold">
-            {title || `${source.label} · som do perfil`}
+            {meta?.title || title || `${source.label} · som do perfil`}
           </p>
           <p className="truncate text-[0.66rem] opacity-70">
-            {artist || (playing ? "tocando" : "toque para ouvir")}
+            {meta?.artist || artist || `${source.label} · ${playing ? "tocando" : "toque para ouvir"}`}
           </p>
         </div>
 
@@ -156,7 +166,6 @@ export function ProfileMusic({
           height={source.kind === "spotify" ? 80 : source.kind === "soundcloud" ? 110 : 92}
           loading="lazy"
           allow={IFRAME_ALLOW}
-          onLoad={() => setLoading(false)}
         />
       )}
 
