@@ -45,6 +45,7 @@ export function Avatar({ profile, size = 40, className, link = true }: AvatarPro
             alt={`Foto de ${profile.display_name || profile.username}`}
             className="h-full w-full object-cover"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <span aria-hidden>{initials}</span>

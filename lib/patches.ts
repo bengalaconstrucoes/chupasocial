@@ -8,6 +8,18 @@ export type Patch = {
 /** Registro de atualizações do site, exibido em /patches. */
 export const PATCHES: Patch[] = [
   {
+    version: "0.8.0",
+    date: "2026-11-27",
+    title: "Site mais rápido e menos consultas no banco",
+    highlights: [
+      "Mensagens: resumo das conversas e total de não lidas agora vêm de uma consulta só, em vez de uma por conversa.",
+      "O shell e a página compartilham a mesma sessão na navegação — uma ida a menos à autenticação por tela.",
+      "Visitas anônimas não consultam a API de auth quando não existe sessão.",
+      "Bloqueios de usuário são carregados junto com o feed, em paralelo, e não antes dele.",
+      "Feed \"Para você\" usa um índice novo para lembrar o que você já viu.",
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-11-27",
     title: "Denúncias com prints e moderação com sanções",

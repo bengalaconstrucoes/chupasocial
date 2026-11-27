@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type {
   CommentItem,
@@ -169,12 +170,13 @@ export async function getMyLikes(postIds: string[]) {
   };
 }
 
-export async function fetchBlockedIds(): Promise<string[]> {
+// Uma consulta por render, mesmo que várias partes da página precisem da lista.
+export const fetchBlockedIds = cache(async (): Promise<string[]> => {
   const supabase = await createClient();
   const { data } = await supabase.rpc("blocked_user_ids");
   if (!data) return [];
   return Array.isArray(data) ? (data as string[]) : [];
-}
+});
 
 export async function fetchFeed(options: {
   mode: "all" | "following" | "profile" | "community" | "hashtag";
@@ -193,7 +195,8 @@ export async function fetchFeed(options: {
   // Buscamos bem mais candidatos no "Para você": assim dá para descartar o que a
   // pessoa já viu e ainda encher a primeira página.
   const fetchLimit = options.personalize && options.viewerId ? Math.min(96, limit * 6) : limit;
-  const blocked = await fetchBlockedIds();
+  // Bloqueios correm em paralelo com o feed e são aplicados no resultado.
+  const blockedPromise = fetchBlockedIds();
 
   let authorIds: string[] | null = null;
   if (options.mode === "following" && options.viewerId) {
@@ -221,7 +224,6 @@ export async function fetchFeed(options: {
     if (filter === "reposts") query = query.not("repost_of", "is", null);
   }
 
-  if (blocked.length > 0) query = query.not("author_id", "in", `(${blocked.join(",")})`);
   if (options.mode === "profile" && options.profileId) query = query.eq("author_id", options.profileId);
   if (options.mode === "following" && authorIds) {
     if (authorIds.length === 0) return [];
@@ -250,10 +252,13 @@ export async function fetchFeed(options: {
   }
   if (options.before) query = query.lt("created_at", options.before);
 
-  const { data, error } = await query;
+  const [{ data, error }, blocked] = await Promise.all([query, blockedPromise]);
   if (error || !data) return [];
 
-  const rows = data as unknown as RawPost[];
+  const blockedSet = new Set(blocked);
+  const rows = (data as unknown as RawPost[]).filter(
+    (row) => !blockedSet.has(row.author_id as string),
+  );
   const ids = rows.flatMap((row) => [row.id, row.repost_of].filter(Boolean));
   const { liked, reposted, saved, userId } = await getMyLikes(ids);
 
@@ -707,84 +712,49 @@ export async function fetchUnreadNotificationCount(userId: string) {
   return count ?? 0;
 }
 
-export async function fetchUnreadMessageCount(userId: string) {
+/** Uma única RPC no banco em vez de uma contagem por conversa. */
+export async function fetchUnreadMessageCount(_userId: string) {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("conversation_members")
-    .select("conversation_id, last_read_at")
-    .eq("user_id", userId);
-  if (!data || data.length === 0) return 0;
-
-  const results = await Promise.all(
-    data.map(async (member: any) => {
-      const { count } = await supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("conversation_id", member.conversation_id)
-        .gt("created_at", member.last_read_at)
-        .neq("sender_id", userId);
-      return count ?? 0;
-    }),
-  );
-  return results.reduce((sum, value) => sum + value, 0);
+  const { data } = await supabase.rpc("unread_message_total");
+  return Number(data ?? 0);
 }
 
+type ConversationSummaryRow = {
+  id: string;
+  title: string | null;
+  last_message_at: string | null;
+  last_message: string | null;
+  last_attachment: string | null;
+  unread_count: number | string | null;
+  members: Profile[] | null;
+};
+
+/**
+ * Uma RPC resolve conversas, últimos mensagens e não lidas. Antes eram três
+ * consultas por conversa (N+1) — agora é uma só.
+ */
 export async function fetchConversations(userId: string): Promise<ConversationSummary[]> {
   const supabase = await createClient();
-  const { data: memberships } = await supabase
-    .from("conversation_members")
-    .select("conversation_id, last_read_at, conversation:conversations(id, last_message_at, title)")
-    .eq("user_id", userId);
+  const { data, error } = await supabase.rpc("conversation_summaries", { p_limit: 50 });
+  if (error || !data) return [];
 
-  if (!memberships || memberships.length === 0) return [];
+  return (data as ConversationSummaryRow[]).map((row) => {
+    const members = (row.members ?? []).filter(Boolean) as Profile[];
+    const lastMessage =
+      row.last_message ||
+      (row.last_attachment === "gif" ? "GIF" : row.last_attachment ? "Imagem" : null);
 
-  const summaries = await Promise.all(
-    memberships.map(async (membership: any) => {
-      const conversationId = membership.conversation_id as string;
-      const [{ data: memberRows }, { data: lastMessages }, { count: unread }] = await Promise.all([
-        supabase
-          .from("conversation_members")
-          .select("user:profiles!conversation_members_user_id_fkey(*)")
-          .eq("conversation_id", conversationId),
-        supabase
-          .from("messages")
-          .select("body, attachment_type")
-          .eq("conversation_id", conversationId)
-          .order("created_at", { ascending: false })
-          .limit(1),
-        supabase
-          .from("messages")
-          .select("id", { count: "exact", head: true })
-          .eq("conversation_id", conversationId)
-          .gt("created_at", membership.last_read_at)
-          .neq("sender_id", userId),
-      ]);
-
-      const members = ((memberRows ?? [])
-        .map((row: any) => row.user as Profile | null)
-        .filter(Boolean) as Profile[]);
-      const other = members.find((member) => member.id !== userId) ?? null;
-      const title = (membership.conversation?.title as string | null) ?? null;
-      const last = lastMessages?.[0];
-
-      return {
-        id: conversationId,
-        last_message_at: membership.conversation?.last_message_at ?? new Date().toISOString(),
-        title,
-        is_group: Boolean(title) || members.length > 2,
-        members,
-        other,
-        last_message: last
-          ? last.body || (last.attachment_type === "gif" ? "GIF" : "Imagem")
-          : null,
-        unread_count: unread ?? 0,
-      } satisfies ConversationSummary;
-    }),
-  );
-
-  return summaries.sort(
-    (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
-  );
+    return {
+      id: row.id,
+      last_message_at: row.last_message_at ?? new Date().toISOString(),
+      title: row.title,
+      is_group: Boolean(row.title) || members.length > 2,
+      members,
+      other: members.find((member) => member.id !== userId) ?? null,
+      last_message: lastMessage,
+      unread_count: Number(row.unread_count ?? 0),
+    } satisfies ConversationSummary;
+  });
 }
 
 export async function fetchCommunities(viewerId?: string): Promise<Community[]> {

@@ -19,6 +19,24 @@ function isProtected(pathname: string) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Sem cookie de sessão não existe usuário para consultar: poupa uma ida à API
+  // de auth em toda visita anônima (landing, login, links compartilhados).
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"));
+
+  if (!hasAuthCookie) {
+    if (isProtected(pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = `?next=${encodeURIComponent(pathname)}`;
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -59,8 +77,6 @@ export async function updateSession(request: NextRequest) {
       });
     }
   }
-
-  const { pathname } = request.nextUrl;
 
   if (!user && isProtected(pathname)) {
     const url = request.nextUrl.clone();
