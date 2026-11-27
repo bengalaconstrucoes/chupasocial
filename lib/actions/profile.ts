@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
 import { normalizeAccent, normalizeNameFont } from "@/lib/profile-style";
 import { normalizeAvatarFrame } from "@/lib/avatar-frames";
+import { parseMusicUrl } from "@/lib/music";
 import { USERNAME_PATTERN } from "@/lib/utils";
 
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
@@ -71,8 +72,14 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   if (bannerUrl && !bannerUrl.startsWith(storagePrefix)) {
     return { ok: false, error: "Endereço de banner inválido." };
   }
-  if (songUrl && !songUrl.startsWith(storagePrefix)) {
-    return { ok: false, error: "Endereço de música inválido." };
+  if (songUrl && songUrl.length > 500) {
+    return { ok: false, error: "O link da música é longo demais." };
+  }
+  if (songUrl && !songUrl.startsWith(storagePrefix) && !parseMusicUrl(songUrl)) {
+    return {
+      ok: false,
+      error: "Cole um link do YouTube, Spotify, SoundCloud, Deezer ou Apple Music.",
+    };
   }
   if (avatarFrame === "admin" && !profileIsAdmin) {
     return { ok: false, error: "A moldura da equipe é reservada para a administração." };

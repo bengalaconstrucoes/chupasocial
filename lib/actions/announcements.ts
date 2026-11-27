@@ -46,7 +46,7 @@ export async function createAnnouncementAction(formData: FormData): Promise<Acti
 
   if (error) return { ok: false, error: "Não foi possível publicar o aviso." };
 
-  revalidatePath("/avisos");
+  revalidatePath("/patches");
   return { ok: true, message: "Aviso publicado." };
 }
 
@@ -100,7 +100,7 @@ export async function replyAnnouncementAction(
 
   if (error || !data) return { ok: false, error: "Não foi possível enviar a resposta." };
 
-  revalidatePath("/avisos");
+  revalidatePath("/patches");
   return {
     ok: true,
     reply: {
@@ -132,6 +132,6 @@ export async function toggleAnnouncementPinAction(
 
   if (error) return { ok: false, error: "Não foi possível alterar o destaque." };
 
-  revalidatePath("/avisos");
+  revalidatePath("/patches");
   return { ok: true, message: pinned ? "Aviso fixado." : "Aviso desafixado." };
 }

@@ -4,7 +4,6 @@ import {
   Compass,
   Flame,
   Hash,
-  Megaphone,
   Sparkles,
   Trophy,
   TrendingUp,
@@ -177,10 +176,10 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
           </li>
           <li>
             <Link
-              href="/avisos"
+              href="/chat"
               className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
             >
-              <Megaphone size={14} className="text-accent" /> Avisos da administração
+              <Users2 size={14} className="text-accent" /> Chat das últimas 24 h
             </Link>
           </li>
           <li>
@@ -188,7 +187,7 @@ export async function RightRail({ viewerId }: { viewerId: string }) {
               href="/patches"
               className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 -mx-1.5 text-sm hover:bg-surface-2"
             >
-              <Sparkles size={14} className="text-accent" /> Novidades e patches
+              <Sparkles size={14} className="text-accent" /> Patches e avisos
             </Link>
           </li>
         </ul>

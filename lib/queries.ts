@@ -527,6 +527,34 @@ export async function fetchProfileStats(userId: string) {
   };
 }
 
+export type TopFriend = Pick<
+  Profile,
+  "id" | "username" | "display_name" | "avatar_url" | "avatar_frame" | "is_verified"
+>;
+
+/** Top 8 do perfil estilo MySpace: quem a pessoa segue mais recentemente. */
+export async function fetchTopFriends(userId: string, limit = 8): Promise<TopFriend[]> {
+  const supabase = await createClient();
+  const { data: follows } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  const ids = (follows ?? []).map((row: any) => row.following_id as string);
+  if (ids.length === 0) return [];
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, avatar_frame, is_verified")
+    .in("id", ids);
+
+  const people = (data ?? []) as TopFriend[];
+  const position = new Map(ids.map((id, index) => [id, index]));
+  return people.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
+}
+
 export async function fetchFollowState(viewerId: string | undefined, targetId: string) {
   if (!viewerId || viewerId === targetId) return { following: false, requested: false };
   const supabase = await createClient();

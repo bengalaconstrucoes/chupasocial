@@ -9,6 +9,7 @@ import { Avatar } from "@/components/avatar";
 import { FlagBadge } from "@/components/badges";
 import { AvatarCrop } from "@/components/settings/avatar-crop";
 import { GifPicker } from "@/components/gif-picker";
+import { parseMusicUrl } from "@/lib/music";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfileAction } from "@/lib/actions/profile";
 import {
@@ -56,6 +57,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   const [pending, startTransition] = useTransition();
 
   const previewNameFont = NAME_FONTS.find((font) => font.id === nameFont)?.className ?? "";
+  const musicSource = parseMusicUrl(songUrl);
   const previewProfile = {
     ...profile,
     display_name: displayName || profile.display_name,
@@ -455,14 +457,30 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
       <div className="rounded-xl border border-line p-3">
         <span className="field-label">Música que toca no seu perfil</span>
-        {songUrl ? (
-          <audio controls src={songUrl} className="mb-2 w-full" />
-        ) : (
-          <p className="mb-2 text-xs text-muted">
-            Envie um áudio de até 15 MB. Ele começa a tocar quando alguém abre seu perfil.
+        <label htmlFor="song_url" className="sr-only">
+          Link da música
+        </label>
+        <input
+          id="song_url"
+          value={songUrl}
+          onChange={(event) => setSongUrl(event.target.value.trim())}
+          maxLength={500}
+          className="field text-sm"
+          placeholder="Cole o link do YouTube, Spotify, SoundCloud, Deezer ou Apple Music"
+        />
+        <p className="mt-1.5 text-[0.68rem] text-muted">
+          Cola o link e pronto: o player oficial aparece no seu perfil. Também dá para enviar um
+          MP3 de até 15 MB.
+        </p>
+        {musicSource && (
+          <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[0.68rem] font-semibold text-accent">
+            <Music2 size={10} /> {musicSource.label} reconhecido
           </p>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        {songUrl && musicSource?.kind === "audio" && (
+          <audio controls src={musicSource.embedUrl} className="mt-2 w-full" />
+        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <label
             className={cn(
               "btn btn-ghost !px-3 !py-1.5 text-xs",
@@ -497,7 +515,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
           )}
         </div>
         <p className="mt-1.5 text-[0.68rem] text-muted">
-          Se o navegador bloquear o autoplay, o botão de play fica no próprio perfil.
+          No YouTube e no Deezer o player só carrega quando alguém toca no play do perfil.
         </p>
       </div>
 

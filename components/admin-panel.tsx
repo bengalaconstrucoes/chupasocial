@@ -3,12 +3,23 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, EyeOff, Loader2, MailOpen, ShieldOff, VolumeX, X } from "lucide-react";
+import {
+  BadgeCheck,
+  EyeOff,
+  Loader2,
+  MailOpen,
+  Search,
+  ShieldCheck,
+  ShieldOff,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import {
   markFeedbackReadAction,
   resolveReportAction,
   setPostHiddenAction,
+  setUserAdminAction,
   setUserMutedAction,
   setUserVerifiedAction,
 } from "@/lib/actions/admin";
@@ -71,11 +82,15 @@ export function AdminPanel({
   users: initialUsers,
   feedback: initialFeedback,
   flags: initialFlags = [],
+  viewerId,
+  searchQuery = "",
 }: {
   reports: AdminReport[];
   users: AdminUser[];
   feedback: AdminFeedback[];
   flags?: AdminFlag[];
+  viewerId: string;
+  searchQuery?: string;
 }) {
   const router = useRouter();
   const [reports, setReports] = useState(initialReports);
@@ -96,6 +111,23 @@ export function AdminPanel({
       setUsers((current) =>
         current.map((item) =>
           item.id === user.id ? { ...item, is_verified: !item.is_verified } : item,
+        ),
+      );
+      router.refresh();
+    });
+  }
+
+  function toggleAdmin(user: AdminUser) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setUserAdminAction(user.id, !user.is_admin);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === user.id ? { ...item, is_admin: !item.is_admin } : item,
         ),
       );
       router.refresh();
@@ -307,49 +339,113 @@ export function AdminPanel({
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold">Contas recentes</h2>
-        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-          {users.map((user) => (
-            <li key={user.id} className="flex items-center gap-3 px-4 py-2.5">
-              <Avatar
-                profile={{ username: user.username, display_name: user.display_name, avatar_url: user.avatar_url }}
-                size={34}
-              />
-              <div className="min-w-0 flex-1">
-                <Link href={`/u/${user.username}`} className="block truncate text-sm font-medium hover:underline">
-                  {user.display_name}
-                  {user.is_admin && <span className="ml-1 text-[0.65rem] text-muted">admin</span>}
-                </Link>
-                <p className="truncate text-xs text-muted">@{user.username}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => verify(user)}
-                disabled={pending}
-                className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
-              >
-                {user.is_verified ? <ShieldOff size={12} /> : <BadgeCheck size={12} />}
-                {user.is_verified ? "remover selo" : "verificar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => toggleMute(user)}
-                disabled={pending}
-                className={
-                  user.muted_until && new Date(user.muted_until).getTime() > Date.now()
-                    ? "btn btn-ghost !px-2.5 !py-1 text-[0.7rem] text-danger"
-                    : "btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
-                }
-                title="Silenciar por 24 h"
-              >
-                <VolumeX size={12} />{" "}
-                {user.muted_until && new Date(user.muted_until).getTime() > Date.now()
-                  ? "remover silêncio"
-                  : "silenciar 24h"}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <h2 className="mb-3 text-sm font-semibold">Contas</h2>
+        <form action="/admin" method="get" className="mb-3 flex flex-wrap gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            />
+            <input
+              name="q"
+              defaultValue={searchQuery}
+              placeholder="Buscar por @usuário ou nome"
+              className="field pl-8 text-sm"
+              aria-label="Buscar conta"
+            />
+          </div>
+          <button type="submit" className="btn btn-ghost text-xs">
+            buscar
+          </button>
+          {searchQuery && (
+            <Link href="/admin" className="btn btn-quiet text-xs">
+              limpar
+            </Link>
+          )}
+        </form>
+        <p className="mb-2 text-[0.7rem] text-muted">
+          {searchQuery
+            ? `${users.length} resultado(s) para “${searchQuery}”.`
+            : `${users.length} contas mais recentes. Busque qualquer pessoa para dar selo ou admin.`}
+        </p>
+        {users.length === 0 ? (
+          <p className="chupa-card p-4 text-xs text-muted">Nenhuma conta encontrada.</p>
+        ) : (
+          <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+            {users.map((user) => {
+              const isMuted = Boolean(
+                user.muted_until && new Date(user.muted_until).getTime() > Date.now(),
+              );
+              return (
+                <li key={user.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                  <Avatar
+                    profile={{
+                      username: user.username,
+                      display_name: user.display_name,
+                      avatar_url: user.avatar_url,
+                    }}
+                    size={34}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/u/${user.username}`}
+                      className="flex flex-wrap items-center gap-1 text-sm font-medium hover:underline"
+                    >
+                      <span className="truncate">{user.display_name}</span>
+                      {user.is_admin && (
+                        <span className="chip !py-0 !text-[0.58rem]">
+                          <ShieldCheck size={9} /> admin
+                        </span>
+                      )}
+                      {user.is_verified && <BadgeCheck size={12} className="text-accent" />}
+                    </Link>
+                    <p className="truncate text-xs text-muted">@{user.username}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => verify(user)}
+                      disabled={pending}
+                      className="btn btn-ghost !px-2.5 !py-1 text-[0.7rem]"
+                    >
+                      {user.is_verified ? <ShieldOff size={12} /> : <BadgeCheck size={12} />}
+                      {user.is_verified ? "tirar selo" : "verificar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleAdmin(user)}
+                      disabled={pending || user.id === viewerId}
+                      className="btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
+                      title={
+                        user.id === viewerId
+                          ? "Você não pode alterar o seu próprio acesso"
+                          : user.is_admin
+                            ? "Remover acesso de administrador"
+                            : "Dar acesso de administrador"
+                      }
+                    >
+                      <ShieldCheck size={12} />
+                      {user.is_admin ? "tirar admin" : "dar admin"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleMute(user)}
+                      disabled={pending}
+                      className={
+                        isMuted
+                          ? "btn btn-ghost !px-2.5 !py-1 text-[0.7rem] text-danger"
+                          : "btn btn-quiet !px-2.5 !py-1 text-[0.7rem]"
+                      }
+                      title="Silenciar por 24 h"
+                    >
+                      <VolumeX size={12} /> {isMuted ? "remover silêncio" : "silenciar 24h"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section>

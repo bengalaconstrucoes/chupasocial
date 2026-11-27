@@ -15,6 +15,7 @@ import {
   fetchPostById,
   fetchProfileStats,
   fetchProfileVisits,
+  fetchTopFriends,
 } from "@/lib/queries";
 import { profileAccentStyle } from "@/lib/profile-style";
 import { createClient } from "@/lib/supabase/server";
@@ -96,11 +97,12 @@ export default async function ProfilePage({
     await supabase.rpc("record_profile_visit", { p_profile: profile.id });
   }
 
-  const [visits, pinnedPost] = await Promise.all([
+  const [visits, pinnedPost, topFriends] = await Promise.all([
     profile.show_visits || isOwner ? fetchProfileVisits(profile.id) : Promise.resolve(null),
     profile.pinned_post_id && !locked && tab === "posts"
       ? fetchPostById(profile.pinned_post_id)
       : Promise.resolve(null),
+    profile.profile_style === "y2k" ? fetchTopFriends(profile.id) : Promise.resolve([]),
   ]);
 
   const orderedPosts =
@@ -121,6 +123,7 @@ export default async function ProfilePage({
           relationship={relationship}
           visits={visits?.total ?? 0}
           achievements={achievements}
+          topFriends={topFriends}
         />
 
         {relationship === "blocking" ? (

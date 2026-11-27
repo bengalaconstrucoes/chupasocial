@@ -8,10 +8,11 @@ import {
   Compass,
   Home,
   Mail,
-  Megaphone,
+  MessagesSquare,
   Search,
   Sparkles,
   Settings,
+  ShieldCheck,
   User,
   Users,
 } from "lucide-react";
@@ -21,6 +22,7 @@ type NavProps = {
   username: string;
   unreadNotifications: number;
   unreadMessages: number;
+  isAdmin?: boolean;
 };
 
 const baseItems = [
@@ -29,8 +31,8 @@ const baseItems = [
   { href: "/communities", label: "Comunidades", icon: Users, exact: false },
   { href: "/notifications", label: "Notificações", icon: Bell, exact: false },
   { href: "/messages", label: "Mensagens", icon: Mail, exact: false },
-  { href: "/avisos", label: "Avisos", icon: Megaphone, exact: false },
-  { href: "/patches", label: "Novidades", icon: Sparkles, exact: false },
+  { href: "/chat", label: "Chat", icon: MessagesSquare, exact: false },
+  { href: "/patches", label: "Patches", icon: Sparkles, exact: false },
   { href: "/saved", label: "Salvos", icon: Bookmark, exact: false },
 ];
 
@@ -39,13 +41,21 @@ function isActive(pathname: string, href: string, exact: boolean) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav({ username, unreadNotifications, unreadMessages }: NavProps) {
+export function SidebarNav({
+  username,
+  unreadNotifications,
+  unreadMessages,
+  isAdmin = false,
+}: NavProps) {
   const pathname = usePathname();
 
   const items = [
     ...baseItems,
     { href: `/u/${username}`, label: "Meu perfil", icon: User, exact: false },
     { href: "/settings", label: "Configurações", icon: Settings, exact: false },
+    ...(isAdmin
+      ? [{ href: "/admin", label: "Administração", icon: ShieldCheck, exact: false }]
+      : []),
   ];
 
   return (
@@ -89,7 +99,8 @@ export function MobileNav({ username, unreadNotifications, unreadMessages }: Nav
   const items = [
     { href: "/", label: "Início", icon: Home },
     { href: "/search", label: "Buscar", icon: Search },
-    { href: "/communities", label: "Comunidades", icon: Users },
+    { href: "/chat", label: "Chat", icon: MessagesSquare },
+    { href: "/communities", label: "Grupos", icon: Users },
     { href: "/notifications", label: "Alertas", icon: Bell, badge: unreadNotifications },
     { href: "/messages", label: "Mensagens", icon: Mail, badge: unreadMessages },
   ];

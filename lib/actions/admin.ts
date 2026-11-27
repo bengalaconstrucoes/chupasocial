@@ -20,18 +20,18 @@ async function requireAdmin() {
     .maybeSingle();
 
   if (!data?.is_admin) return null;
-  return supabase;
+  return { supabase, userId: user.id };
 }
 
 export async function setUserVerifiedAction(
   userId: string,
   verified: boolean,
 ): Promise<ActionResult> {
-  const supabase = await requireAdmin();
-  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
   if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
 
-  const { error } = await supabase
+  const { error } = await admin.supabase
     .from("profiles")
     .update({ is_verified: verified })
     .eq("id", userId);
@@ -42,15 +42,40 @@ export async function setUserVerifiedAction(
   return { ok: true, message: verified ? "Conta verificada." : "Selo removido." };
 }
 
+export async function setUserAdminAction(
+  userId: string,
+  isAdmin: boolean,
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
+  if (userId === admin.userId) {
+    return { ok: false, error: "Você não pode remover o seu próprio acesso de administrador." };
+  }
+
+  const { error } = await admin.supabase
+    .from("profiles")
+    .update({ is_admin: isAdmin })
+    .eq("id", userId);
+
+  if (error) return { ok: false, error: "Não foi possível atualizar o acesso de administrador." };
+
+  revalidatePath("/admin");
+  return {
+    ok: true,
+    message: isAdmin ? "Agora essa conta é administradora." : "Acesso de administrador removido.",
+  };
+}
+
 export async function resolveReportAction(
   reportId: string,
   status: "reviewed" | "dismissed",
 ): Promise<ActionResult> {
-  const supabase = await requireAdmin();
-  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
   if (!UUID.test(reportId)) return { ok: false, error: "Denúncia inválida." };
 
-  const { error } = await supabase
+  const { error } = await admin.supabase
     .from("reports")
     .update({ status })
     .eq("id", reportId);
@@ -66,11 +91,11 @@ export async function setPostHiddenAction(
   hidden: boolean,
   reason?: string,
 ): Promise<ActionResult> {
-  const supabase = await requireAdmin();
-  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
   if (!UUID.test(postId)) return { ok: false, error: "Publicação inválida." };
 
-  const { error } = await supabase
+  const { error } = await admin.supabase
     .from("posts")
     .update({
       hidden_at: hidden ? new Date().toISOString() : null,
@@ -89,11 +114,11 @@ export async function setUserMutedAction(
   userId: string,
   minutes: number,
 ): Promise<ActionResult> {
-  const supabase = await requireAdmin();
-  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
   if (!UUID.test(userId)) return { ok: false, error: "Usuário inválido." };
 
-  const { error } = await supabase.rpc("set_user_muted", {
+  const { error } = await admin.supabase.rpc("set_user_muted", {
     p_user: userId,
     p_minutes: minutes,
   });
@@ -108,11 +133,11 @@ export async function setUserMutedAction(
 }
 
 export async function markFeedbackReadAction(feedbackId: string): Promise<ActionResult> {
-  const supabase = await requireAdmin();
-  if (!supabase) return { ok: false, error: "Apenas administradores podem fazer isso." };
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Apenas administradores podem fazer isso." };
   if (!UUID.test(feedbackId)) return { ok: false, error: "Feedback inválido." };
 
-  const { error } = await supabase
+  const { error } = await admin.supabase
     .from("feedback")
     .update({ status: "read" })
     .eq("id", feedbackId);

@@ -59,7 +59,8 @@ export default async function SettingsPage() {
               <span className="field-label">Modo do site</span>
               <ThemeToggle />
               <p className="mt-2 text-[0.7rem] text-muted">
-                O modo escolhido fica salvo e não volta ao padrão quando você recarrega a página.
+                O botão de tema saiu do menu e agora mora aqui. O modo escolhido fica salvo e não
+                volta ao padrão quando você recarrega a página.
               </p>
             </div>
             <div className="border-t border-line pt-4">

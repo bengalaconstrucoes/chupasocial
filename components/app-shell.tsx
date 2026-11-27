@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { CallProvider } from "@/components/call/call-provider";
 import { Logo } from "@/components/logo";
 import { MobileNav, SidebarNav } from "@/components/nav-links";
 import { PresenceHeartbeat } from "@/components/presence-heartbeat";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { signOutAction } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -43,7 +42,7 @@ export async function AppShell({
   const shell = (
     <div className="mx-auto flex w-full max-w-[1120px] gap-6 px-0 sm:px-4 lg:px-6">
       <aside className="sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col justify-between py-6 lg:flex">
-        <div>
+        <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar">
           <Link href="/" aria-label="ChupaSocial, início">
             <Logo />
           </Link>
@@ -51,11 +50,11 @@ export async function AppShell({
             username={profile.username}
             unreadNotifications={unreadNotifications}
             unreadMessages={unreadMessages}
+            isAdmin={Boolean(profile.is_admin)}
           />
         </div>
 
         <div className="space-y-2">
-          <ThemeToggle />
           <div className="flex items-center gap-2 rounded-xl border border-line bg-surface p-2.5">
             <Avatar profile={profile} size={34} />
             <div className="min-w-0 flex-1">
@@ -89,7 +88,24 @@ export async function AppShell({
             <Logo />
           </Link>
           <div className="flex items-center gap-1">
-            <ThemeToggle compact />
+            <Link
+              href="/patches"
+              className="btn btn-quiet h-9 w-9 !p-0"
+              aria-label="Patches e avisos"
+              title="Patches e avisos"
+            >
+              <Sparkles size={17} />
+            </Link>
+            {profile.is_admin && (
+              <Link
+                href="/admin"
+                className="btn btn-quiet h-9 w-9 !p-0"
+                aria-label="Administração"
+                title="Administração"
+              >
+                <ShieldCheck size={17} />
+              </Link>
+            )}
             <form action={signOutAction}>
               <button
                 type="submit"
@@ -116,6 +132,7 @@ export async function AppShell({
         username={profile.username}
         unreadNotifications={unreadNotifications}
         unreadMessages={unreadMessages}
+        isAdmin={Boolean(profile.is_admin)}
       />
     </div>
   );
