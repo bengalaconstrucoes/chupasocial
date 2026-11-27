@@ -31,19 +31,14 @@ export async function AppShell({
 
   if (!user) redirect("/login?erro=sessao");
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const profile = profileData as Profile | null;
-  if (!profile) redirect("/login?erro=sessao");
-
-  const [unreadNotifications, unreadMessages] = await Promise.all([
+  const [{ data: profileData }, unreadNotifications, unreadMessages] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     fetchUnreadNotificationCount(user.id),
     fetchUnreadMessageCount(user.id),
   ]);
+
+  const profile = profileData as Profile | null;
+  if (!profile) redirect("/login?erro=sessao");
 
   const shell = (
     <div className="mx-auto flex w-full max-w-[1120px] gap-6 px-0 sm:px-4 lg:px-6">

@@ -88,6 +88,10 @@ h1, h2, h3, h4 {
   letter-spacing: -0.02em;
 }
 
+/* Componentes em camada: utilitários do Tailwind (pl-8, pr-11, px-3…)
+   agora conseguem sobrescrever o padrão sem brigar com o ícone do campo. */
+@layer components {
+
 /* Superfícies */
 .chupa-card {
   background: var(--surface);
@@ -130,6 +134,7 @@ h1, h2, h3, h4 {
 .btn-primary {
   background: var(--accent);
   color: var(--accent-ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -216,6 +221,8 @@ h1, h2, h3, h4 {
   border-radius: 8px;
 }
 
+}
+
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -248,6 +255,7 @@ h1, h2, h3, h4 {
 .prose-chupa {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 
 /* Fontes escolhidas para o nome do perfil */
@@ -300,6 +308,7 @@ h1, h2, h3, h4 {
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
+  contain: strict;
 }
 
 .chupa-fx-dot {
@@ -314,7 +323,6 @@ h1, h2, h3, h4 {
   animation-name: fx-fall;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  filter: blur(0.4px);
 }
 
 .chupa-fx-bubbles .chupa-fx-dot {
@@ -345,4 +353,48 @@ h1, h2, h3, h4 {
 @keyframes fx-twinkle {
   0%, 100% { opacity: 0.18; transform: scale(0.85); }
   50% { opacity: 0.9; transform: scale(1.3); }
+}
+
+/* Rolagem discreta, no estilo de app */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  background-clip: content-box;
+}
+
+/* No celular, 16px evita o zoom automático do iOS ao focar o campo. */
+@media (max-width: 640px) {
+  .field {
+    font-size: 1rem;
+  }
+}
+
+@media (hover: hover) {
+  .chupa-card {
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .chupa-card:hover {
+    border-color: color-mix(in srgb, var(--line) 65%, var(--muted));
+  }
 }

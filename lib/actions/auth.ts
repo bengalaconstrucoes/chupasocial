@@ -81,6 +81,10 @@ export async function signUpAction(_prev: AuthState, formData: FormData): Promis
   if (rpcError) return { error: "Não foi possível validar o nome de usuário agora." };
   if (available === false) return { error: "Esse nome de usuário já está em uso." };
 
+  // Um cadastro antigo pode ter deixado uma conta de auth sem perfil (órfã)
+  // segurando esse e-mail sintético. Liberamos o nome antes de criar a conta.
+  await supabase.rpc("release_username", { p_username: username });
+
   const { data, error } = await supabase.auth.signUp({
     email: syntheticEmail(username),
     password,
@@ -131,10 +135,21 @@ export async function signInAction(_prev: AuthState, formData: FormData): Promis
 
   const supabase = await createClient();
   const usingEmail = identifier.includes("@");
-  const { error } = await supabase.auth.signInWithPassword({
-    email: usingEmail ? identifier : syntheticEmail(identifier),
-    password,
-  });
+
+  // Contas sem e-mail real usam um endereço sintético derivado do usuário
+  // original. Se a pessoa trocou de @, resolvemos o endereço antigo aqui para
+  // que o login funcione com o nome novo.
+  let email = usingEmail ? identifier : syntheticEmail(identifier);
+  if (!usingEmail) {
+    const { data: original } = await supabase.rpc("login_username_for", {
+      p_username: identifier,
+    });
+    if (typeof original === "string" && original.trim()) {
+      email = syntheticEmail(original.trim());
+    }
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     if (!usingEmail) {

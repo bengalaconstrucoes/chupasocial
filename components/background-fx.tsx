@@ -42,7 +42,7 @@ export function BackgroundFx({ initial = "none" }: { initial?: BackgroundTheme }
 
   if (theme === "none") return null;
 
-  const count = theme === "stars" ? 70 : 34;
+  const count = theme === "stars" ? 46 : 22;
 
   return (
     <div aria-hidden className={cn("chupa-fx", `chupa-fx-${theme}`)}>
